@@ -2,7 +2,7 @@ name: formsflow-forms to Docker Hub
 
 on:
   push:
-    branches: [formsflow-forms, develop]
+    branches: [formsflow-forms, develop,testing-branch]
   workflow_dispatch:
   
 jobs:
@@ -61,7 +61,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache
       - name: Build and push
         if: ${{ github.ref == 'refs/heads/formsflow-forms' }}
-        id: docker_build
+        id: docker_build_new
         uses: docker/build-push-action@v2
         with:
           context: ./

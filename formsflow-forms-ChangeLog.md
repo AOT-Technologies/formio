@@ -10,6 +10,10 @@ All significant changes to formsflow-forms will be clearly documented in this fi
 - `Upcoming Features`: Planned features or enhancements that will be available in future releases.
 - `Known Issues`: Existing issues or problems that are acknowledged and will be addressed in subsequent updates.
 
+## Version 5.2.1
+### Added
+-  Multi-arch support of docker image
+
 ## Version 5.2.0
 ### Added
 - The `skip-sanitize` option added to the header, allowing the skipping of form submission sanitization.

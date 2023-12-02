@@ -125,8 +125,9 @@ class Validator {
 
       // Set the value to the submission.
       unsetsEnabled = true;
+
       form.setValue(submission, {
-        sanitize: this.sanitize
+        sanitize: this.sanitize || ( form.allowAllSubmissionData ? false : true)
       });
 
       // Check the visibility of conditionally visible components after unconditionally visible

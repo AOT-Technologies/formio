@@ -128,7 +128,7 @@ module.exports = (app, template, hook) => {
           assert.equal(form.hasOwnProperty('machineName'), true);
 
           let machineName = form.machineName;
-          let tempForm = _.omit(form, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName', 'owner', '_vid', 'revisions']);
+          let tempForm = _.omit(form, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName', 'owner', '_vid', 'revisions', 'submissionRevisions']);
 
           tempForm.access = tempForm.access.map(access => {
             access.roles = access.roles.map(role => {
@@ -235,6 +235,7 @@ module.exports = (app, template, hook) => {
 
     describe('Empty Template', function() {
       let testTemplate = require('../src/templates/empty.json');
+      testTemplate.revisions = {};
       let _template = _.cloneDeep(testTemplate);
 
       describe('Import', function() {
@@ -280,6 +281,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+                        exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -346,6 +349,7 @@ module.exports = (app, template, hook) => {
 
     describe('Default Template', function() {
       let testTemplate = require('../src/templates/default.json');
+      testTemplate.revisions = {};
       let _template = _.cloneDeep(testTemplate);
 
       describe('Import', function() {
@@ -391,6 +395,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -510,6 +516,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -632,6 +640,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -754,6 +764,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -876,6 +888,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -998,6 +1012,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1120,6 +1136,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1242,6 +1260,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1364,6 +1384,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1486,6 +1508,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1608,6 +1632,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1734,6 +1760,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1869,6 +1897,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -1981,6 +2011,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2103,6 +2135,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2226,6 +2260,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2349,6 +2385,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2473,6 +2511,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2596,6 +2636,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2719,6 +2761,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2841,6 +2885,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -2963,6 +3009,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -3085,6 +3133,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -3212,6 +3262,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -3334,6 +3386,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -3456,6 +3510,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });
@@ -3579,6 +3635,8 @@ module.exports = (app, template, hook) => {
             }
 
             exportData = data;
+            exportData.forms = _.mapValues(exportData.forms, (form) => _.omit(form, ['submissionRevisions']));
+            exportData.resources = _.mapValues(exportData.resources, (resource) => _.omit(resource, ['submissionRevisions']));
             return done();
           });
         });

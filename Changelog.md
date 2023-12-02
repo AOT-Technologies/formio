@@ -4,62 +4,95 @@ All notable changes to this project will be documented in this file
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/)
 
-## 2.4.1
-### Changed
- - Official Release
- - Updated formiojs@4.14.6
+## 3.0.0-rc.7
+### Fixed
+ - FIO-5155: Fixes submissions not loaded for sub forms with array data structure
+ - FIO-5363: deleted default value of transport select for email action settings
 
-## 2.4.1-rc.3
-### Changed
- - Updated formiojs@4.14.6-rc.3
- - Updated formio-workers@1.16.3
+## 3.0.0-rc.6
+### Fixed
+ - FIO-5334: fixed typo in the email action settings bcc placeholder
 
-## 2.4.1-rc.2
-### Changed
- - Updated formiojs@4.14.6-rc.2
- - Updated formio-workers@1.16.2
+## 3.0.0-rc.5
+### Fixed
+ - FIO-5199: Provided user information for external users
+ - FIO-5233: fixed an issue with incorrect values in different timezones
 
-## 2.4.1-rc.1
-### Changed
- - Updated formiojs@4.14.6-rc.1
+## 3.0.0-rc.4
+### Fixed
+ - Fixes Group Permissions issue
 
-## 2.4.0
-### Changed
- - Official Release
- - Updated formiojs@4.14.1
+## 3.0.0-rc.3
+### Fixed
+ - Issue with the noValidate to allow the request object to set it before.
 
-## 2.4.0-rc.10
-### Changed
- - Updated formiojs@4.14.1-rc.17
+## 3.0.0-rc.2
+### Fixed
+ - fixed processing of loadRevision execution results
+ - FIO-4974: allowed to process all types of requests without a body for the webhook action
+ - FIO-5076: fixed subId parameter
+ - FIO-5076: synchronized form id and submission id
+ - FIO-5090: form revisions transfer for stage deployment
+ - FIO-5000: Change to use accept list for accepted headers.
+ - FIO-4860: Added new index to action items
+ - FIO-4859: Field based access for patch request fix
+ - FIO-4448: Adds route for deleting all form submissions with x-delete-confirm header check
+ - Allow all submission data setting with form setting changes.
 
-## 2.4.0-rc.9
-### Changed
- - Updated formiojs@4.14.1-rc.16
+## 3.0.0-rc.1
+### Breaking Change
+ - Removed the SQL Action
 
-## 2.4.0-rc.8
-### Changed
- - Updated formiojs@4.14.1-rc.15
+### Fixed
+ - Fixed issues where form revisions with original configured would not
+ - FIO-4741: Added max password length for password reset
 
-## 2.4.0-rc.7
-### Changed
- - Updated formiojs@4.14.1-rc.14
+### Added
+ - Add noValidate property to req object on submission validation
+ - Added public config support for OSS
 
-## 2.4.0-rc.6
 ### Changed
- - Updated formiojs@4.14.1-rc.13
+ - Upgrade html-entities@2.3.3, mailgun.js@5.0.5, moment@2.29.2, mongoose@6.2.10, semver@7.3.6, body-parser@1.20.0, mongodb@4.5.0, eslint@8.12.0
+ - formio-workers@1.16.3, mailgun.js@5.2.0, eslint@8.13.0
 
-## 2.4.0-rc.5
+## 2.5.0-rc.8
 ### Changed
- - Updated formiojs@4.14.1-rc.12
+ - Updated formiojs@4.15.0-rc.7
 
-## 2.4.0-rc.4
-### Changed
- - Updated formiojs@4.14.1-rc.11
+## 2.5.0-rc.7
+### Fixed
+ - FIO-4781: Fixing email pdf attachments.
 
-## 2.4.0-rc.3
+## 2.5.0-rc.6
 ### Changed
- - Updated formiojs@4.14.1-rc.10
- - Update reference.js
+ - Updated formiojs@4.15.0-rc.6
+
+## 2.5.0-rc.5
+### Changed
+ - Updated formiojs@4.15.0-rc.5
+
+## 2.5.0-rc.4
+### Changed
+ - Updated formiojs@4.15.0-rc.4
+
+## 2.5.0-rc.3
+### Changed
+ - Updated formiojs@4.15.0-rc.3
+
+### Fixed
+ - Revert "FIO-4216: 'Resource not found' when get submission form submission collection"
+
+## 2.5.0-rc.2
+### Changed
+ - Updated formiojs@4.15.0-rc.2
+
+### Fixed
+ - Fixed a crash in resource field removal.
+ - FIO-4359: submission revision issue fix
+
+## 2.5.0-rc.1
+### Fixed
+ - FIO-4359: submission revisions
 
 ## 2.4.0-rc.2
 ### Changed

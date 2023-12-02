@@ -171,7 +171,7 @@ module.exports = (router) => {
             inline: true,
             optionsLabelPosition: 'right',
             // eslint-disable-next-line max-len
-            tooltip: 'Dynamic rendering uses formio.js to render email. While static relies on outdated set of mappers.\r\n\r\nStatic rendering considered deprecated and should not be used for most cases.',
+            tooltip: 'Dynamic rendering uses formio.js to render email. While static relies on outdated set of mappers.',
             input: true,
           },
         ];
@@ -263,7 +263,7 @@ module.exports = (router) => {
                   else {
                     setActionItemMessage('Message Sent');
                   }
-                });
+                }, setActionItemMessage);
               });
           })
           .catch((err) => {

@@ -2,9 +2,9 @@
 
 ![Formio](https://img.shields.io/badge/formio-2.4.1-blue) ![Formsflow-forms](https://img.shields.io/docker/v/formsflow/forms-flow-forms?label=formsflow-forms-latest-image)
 
-**formsflow.ai** leverages form.io to build "serverless" data management applications using a simple drag-and-drop form builder interface.
-
-To know more about form.io, go to  <https://form.io>.
+Walkthrough video and tutorial
+-------------------
+For a walkthrough tutorial on how to use this Open Source platform to build a Serverless application, watch the video [0 to M.E.A.N in 30 minutes](https://www.youtube.com/watch?v=d2gTYkPFhPI)
 
  
 ## Prerequisites

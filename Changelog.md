@@ -2,7 +2,254 @@
 All notable changes to this project will be documented in this file
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
-and this project adheres to [Semantic Versioning](http://semver.org/)
+and this project adheres to [Semantic Versioning](http://semver.org/)//
+
+## 3.3.5
+### Changed
+ - Official Release
+ - Updated formiojs@4.17.4
+ - Updated formio-workers@1.19.4
+
+## 3.3.5-rc.4
+### Changed
+ - Updated formio-workers@1.19.4-rc.3
+
+## 3.3.5-rc.3
+### Changed
+ - Updated formiojs@4.17.4-rc.2
+ - Updated formio-workers@1.19.4-rc.2
+
+## 3.3.5-rc.2
+### Changed
+ - Revert "FIO-6495: fixed an issue where revision ID of nested form does not transfer from stage to stage
+
+## 3.3.5-rc.1
+### Changed
+ - Updated formiojs@4.17.4-rc.1
+ - Updated formio-workers@1.19.4-rc.1
+ - FIO-6495: fixed an issue where revision ID of nested form does not transfer from stage to stage
+   
+## 3.3.4
+### Changed
+ - Official Release
+ - Updated formiojs@4.17.3
+ - Updated formio-workers@1.19.3
+
+## 3.3.4-rc.6
+### Changed
+ - Updated formio-workers@1.19.3-rc.5
+ - FIO-7491: fixed an issue where dataTable component with resource data type does not work after exporting/importing
+ - FIO-7510: Revert isolated vm changes
+   
+## 3.3.4-rc.5
+### Changed
+ - Updated formiojs@4.17.3-rc.2
+ - Updated formio-workers@1.19.3-rc.4
+
+## 3.3.4-rc.4
+### Changed
+ - FIO-7351 fixed submitting data using Wizard with conditionals for Panel component
+   
+## 3.3.4-rc.3
+### Changed
+ - Updated formio-workers@1.19.3-rc.3
+
+## 3.3.4-rc.2
+### Changed
+ - Updated formio-workers@1.19.3-rc.2
+
+## 3.3.4-rc.1
+### Changed
+ - Updated formiojs@4.17.3-rc.1
+ - Updated formio-workers@1.19.3-rc.1
+ - Updated @formio/core@1.3.0-rc.22
+ - FIO-7344 Changed Rendering method tooltip
+ - FIO-7371: Adds checks to define if raw DB data should be returned in response
+ - FIO-7329: remove nodemailer sendgrid and mailgun
+ - FIO-7167: Isolated VM
+
+## 3.3.3
+### Changed
+ - Official Release
+ - Updated formiojs@4.17.2
+ - Updated formio-workers@1.19.2
+
+## 3.3.3-rc.1
+### Changed
+ - Updated formiojs@4.17.2-rc.1
+ - Updated formio-workers@1.19.2-rc.1
+
+## 3.3.2
+### Changed
+ - Official Release
+ - Updated formiojs@4.17.1
+ - Updated formio-workers@1.19.1
+
+## 3.3.2-rc.1
+### Changed
+ - bugfix: add catch block to nunjucks injection
+
+### Changed
+ - Increment patch version
+   
+## 3.3.1-rc.3
+### Changed
+ - Updated formiojs@4.17.1-rc.3
+ - Updated formio-workers@1.19.1-rc.3
+
+## 3.3.1-rc.2
+### Changed
+ - Updated formiojs@4.17.1-rc.2
+ - Updated formio-workers@1.19.1-rc.2
+
+## 3.3.1-rc.1
+### Changed
+ - Updated formiojs@4.17.1-rc.1
+ - Updated formio-workers@1.19.1-rc.1
+
+## 3.3.0
+### Changed
+ - Official Release
+ - Updated formiojs@4.17.0
+ - Updated formio-workers@1.19.0
+
+## 3.3.0-rc.6
+### Changed
+ - Revert "FIO-6630: Expanded Actions Logic UI"
+
+## 3.3.0-rc.5
+### Changed
+ - Updated formiojs@4.17.0-rc.7
+ - Updated formio-workers@1.19.0-rc.5
+ - Expanded Actions Logic UI
+
+## 3.3.0-rc.4
+### Changed
+ - Updated formiojs@4.17.0-rc.6
+ - Updated formio-workers@1.19.0-rc.4
+ - FIO-7124: replaced action logging with hook
+
+## 3.3.0-rc.3
+### Changed
+ - Updated formiojs@4.17.0-rc.4
+ - Updated formio-workers@1.19.0-rc.3
+
+## 3.3.0-rc.2
+### Changed
+ - Updated formiojs@4.17.0-rc.3
+ - Updated formio-workers@1.19.0-rc.2
+
+## 3.3.0-rc.1
+### Changed
+ - Updated formiojs@4.17.0-rc.2
+ - Updated formio-workers@1.19.0-rc.1
+ - FIO-6919: fixed value for Signature submission in Data Tab
+ - FIO-5731: fixed validation error for wizard forms with advanced conditions
+ - FIO-6966: Fixes empty address component data in CSV
+
+## 3.2.0-rc.1
+### Changed
+ - Updated formiojs@4.16.0-rc.2
+ - Updated formio-workers@1.18.0-rc.1
+
+### Fixed
+ - FIO-6601: Fix getting submissions by reference from custom submissions collection
+ - FIO-4500: Fixes an issue where specified in the component settings delimiter is not used for CSVExport of Tags component data
+ - FIO-6414: fixed filtering issues inside DT
+ - FIO-4216: Fixes 'Resource not found' issue when using submission collection and trying to retrieve submission using x-token
+ - FIO-6840: Refactor authentication to use case-insensitive query and fallback to $regex
+ - FIO-6729: changed the output of data in the logs
+ - FIO-3840: fixed swagger spec definition for components with obj type
+ - FIO-6406: fixed filter for Select inside DT
+ - FIO-4809: Added tests for Wizard suffix/prefix
+ - Bump json5 from 2.2.1 to 2.2.3
+ - Bump @xmldom/xmldom from 0.7.5 to 0.7.11
+ - Bump nunjucks from 3.2.3 to 3.2.4
+ - Bump vm2 from 3.9.11 to 3.9.18
+ - Bump semver from 7.3.8 to 7.5.2
+ - Bump cookiejar from 2.1.3 to 2.1.4
+ - FIO-6840: change to allow case insensitive exists endpoint
+ - FIO-7161: fixed issue with possible undefined value for radio component in csv export
+ - FIO-7067: fixed issue with empty value for patch request
+ - FIO-7166: Adding a mongodb feature check to core
+ - FIO-4216 | FIO-6601 - Fixes no custom submission collection lookup when getting submissions
+
+### Changed
+ - FIO-6769: Removed the `empty` template
+
+## 3.1.0-rc.5
+### Fixed
+ - FIO 6579: another potential problem with legacy templates
+ - FIO-6424: fixed displaying of Select component with Save as reference property when download PDF
+
+## 3.1.0-rc.4
+### Changed
+ - TO-DO: ADD INFO HERE.
+
+## 3.1.0-rc.3
+### Changed
+ - Updated formiojs@4.15.0-rc.19
+ - Updated formio-workers@1.17.0-rc.2
+
+### Fixed
+ - FIO-5688: Allow for a DEFAULT_TRANSPORT to enable the default sending…
+
+## 3.1.0-rc.2
+### Changed
+ - Revert "FIO-5497: fixed DeprecationWarning for crypto.createDecipher"
+ - FIO-5709: fix the response radio value in the CSV shows as blank
+
+## 3.1.0-rc.1
+### Changed
+ - Updated formiojs@4.15.0-rc.18
+ - Updated formio-workers@1.17.0-rc.1
+
+### Changed
+ - Increment minor version.
+ - Remove submission collection tests in open source core
+ - upgrade jsonwebtoken dependency
+ - Allow the display of all images and signatures in index when ?full=true is provided in the url
+ - Revert "FIO-5497: fixed DeprecationWarning for crypto.createDecipher"
+
+### Fixed
+ - FIO-4189: fixed advanced logic not working inside Nested Form
+ - FIO-5497: fixed DeprecationWarning for crypto.createDecipher
+ - FIO-5471: Removed mongoose.save from codebase
+ - FIO-5860: export error caused by old temp
+ - FIO-5860: fixed tests
+ - Revert "FIO-5233: fixed an issue with incorrect values in different timezones…"
+ - FIO-5911: update email action steps
+ - FIO-5785 Fixed Select component submission showing id instead of template for URL data source
+ - FIO-5904: fixed saving data for Components outside of Wizards
+ - FIO-6069: document db restrictions handling
+ - FIO-5904: Fixed a bug where data for form components wouldn't save if outside of a wizard
+ - FIO-5688: Allow for a DEFAULT_TRANSPORT to enable the default sending method for emails.
+ - FIO-6579: Fix project template exports crashing the server
+
+## 3.0.0-rc.11
+### Fixed
+ - FIO-5494: removed erroneous empty addresses
+ - FIO-5774: added revisions of submissions collections
+ - FIO-5756: PDF | Regression | FFT 502 Bad gateway error after Click on submit
+ - FIO-5495: added submission data for delete req
+
+## 3.0.0-rc.10
+### Fixed
+ - FIO-5435: fixed exists endpoint with submission collections
+ - FIO-5090: vid numbering fix
+
+### Changed
+ - Upgrade dependencies: body-parser@1.20.1, express@4.18.2, mongoose@6.6.5, nodemailer-mailgun-transport@2.1.5, semver@7.3.8, nodemon@2.0.20, mongodb@4.10.0, nodemailer@6.8.0, eslint@8.
+25.0, supertest@6.3.0, mailgun.js@8.0.1
+
+## 3.0.0-rc.9
+### Fixed
+ - FIO-5433: fixed (snyk) Prototype Pollution in mongoose
+ - Upgrade dependencies.
+
+## 3.0.0-rc.8
+### Fixed
+ - FIO-4433: fixed recalculation on server for draft submission
 
 ## 3.0.0-rc.7
 ### Fixed

@@ -1,9 +1,6 @@
 'use strict';
 
 const nodemailer = require('nodemailer');
-const sgTransport = require('nodemailer-sendgrid');
-const mandrillTransport = require('nodemailer-mandrill-transport');
-const mailgunTransport = require('nodemailer-mailgun-transport');
 const debug = {
   email: require('debug')('formio:settings:email'),
   send: require('debug')('formio:settings:send'),
@@ -14,6 +11,7 @@ const fetch = require('@formio/node-fetch-http-proxy');
 const util = require('./util');
 const _ = require('lodash');
 
+const DEFAULT_TRANSPORT = process.env.DEFAULT_TRANSPORT;
 const EMAIL_OVERRIDE = process.env.EMAIL_OVERRIDE;
 const EMAIL_CHUNK_SIZE = process.env.EMAIL_CHUNK_SIZE || 100;
 const NON_PRIORITY_QUEUE_TIMEOUT = process.env.NON_PRIORITY_QUEUE_TIMEOUT || 1000;
@@ -65,12 +63,6 @@ module.exports = (formio) => {
         availableTransports.push({
           transport: 'sendgrid',
           title: 'SendGrid',
-        });
-      }
-      if (_.get(settings, 'email.mandrill.auth.apiKey')) {
-        availableTransports.push({
-          transport: 'mandrill',
-          title: 'Mandrill',
         });
       }
       if (_.get(settings, 'email.mailgun.auth.api_key')) {
@@ -175,6 +167,18 @@ module.exports = (formio) => {
     .catch(reject);
   });
 
+  const getEnvSettings = (variable) => {
+    let settings = null;
+    try {
+      settings = JSON.parse(variable);
+    }
+    catch (err) {
+      console.log(`Cannot read ${variable}: ${err.message}`);
+      settings = null;
+    }
+    return settings;
+  };
+
   /**
    * Util function to run the email through nunjucks.
    *
@@ -212,7 +216,8 @@ module.exports = (formio) => {
       }
 
       return resolve(injectedEmail);
-    });
+    })
+    .catch(reject);
   });
 
   /**
@@ -225,7 +230,7 @@ module.exports = (formio) => {
    * @param next
    * @returns {*}
    */
-  const send = (req, res, message, params, next) => {
+  const send = (req, res, message, params, next, setActionItemMessage = () => {}) => {
     // The transporter object.
     let transporter = {sendMail: null};
 
@@ -265,53 +270,66 @@ module.exports = (formio) => {
       // Force the email type to custom for EMAIL_OVERRIDE which will allow
       // us to use ngrok to test emails out of test platform.
       if (EMAIL_OVERRIDE) {
-        try {
-          const override = JSON.parse(EMAIL_OVERRIDE);
-          if (override && override.hasOwnProperty('transport')) {
-            emailType = override.transport;
-            settings.email = {};
-            settings.email[emailType] = override.settings;
-          }
-          else {
-            emailType = 'custom';
-          }
+        const override = getEnvSettings(EMAIL_OVERRIDE);
+        if (override && override.hasOwnProperty('transport')) {
+          emailType = override.transport;
+          settings.email = {};
+          settings.email[emailType] = override.settings;
         }
-        catch (err) {
+        else {
           emailType = 'custom';
+        }
+      }
+
+      if (emailType === 'default' && DEFAULT_TRANSPORT) {
+        const defaultTransport = getEnvSettings(DEFAULT_TRANSPORT);
+        if (defaultTransport && defaultTransport.hasOwnProperty('transport')) {
+          emailType = defaultTransport.transport;
+          settings.email = {};
+          settings.email[emailType] = defaultTransport.settings;
+          settings.email[emailType].defaultTransport = true;
         }
       }
 
       switch (emailType) {
         case 'default':
           if (_config && formio.config.email.type === 'sendgrid') {
-            transporter = nodemailer.createTransport(sgTransport({
-              apiKey: formio.config.email.password
-            }));
-          }
-          else if (_config && formio.config.email.type === 'mandrill') {
-            transporter = nodemailer.createTransport(mandrillTransport({
+            transporter = nodemailer.createTransport({
+              host: 'smtp.sendgrid.net',
+              port: 587,
+              secure: false,
               auth: {
-                apiKey: formio.config.email.apiKey,
-              },
-            }));
+                user: 'apikey',
+                pass: settings.email.sendgrid.auth.api_key
+              }
+            });
           }
           break;
         case 'sendgrid':
           if (_.has(settings, 'email.sendgrid')) {
             debug.email(settings.email.sendgrid);
-            transporter = nodemailer.createTransport(sgTransport({
-              apiKey: settings.email.sendgrid.auth.api_key
-            }));
-          }
-          break;
-        case 'mandrill':
-          if (_.has(settings, 'email.mandrill')) {
-            transporter = nodemailer.createTransport(mandrillTransport(settings.email.mandrill));
+            transporter = nodemailer.createTransport({
+              host: 'smtp.sendgrid.net',
+              port: 587,
+              secure: false,
+              auth: {
+                user: 'apikey',
+                pass: settings.email.sendgrid.auth.api_key
+              }
+            });
           }
           break;
         case 'mailgun':
           if (_.has(settings, 'email.mailgun')) {
-            transporter = nodemailer.createTransport(mailgunTransport(settings.email.mailgun));
+            transporter = nodemailer.createTransport({
+              host: 'smtp.mailgun.org',
+              port: 587,
+              secure: false,
+              auth: {
+                user: settings.email.mailgun.auth.domain,
+                pass: settings.email.mailgun.auth.api_key
+              }
+            });
           }
           break;
         case 'smtp':
@@ -461,7 +479,7 @@ module.exports = (formio) => {
 
         return new Promise((resolve, reject) => {
           // Allow anyone to hook the final email before sending.
-          return hook.alter('email', email, req, res, params, (err, email) => {
+          return hook.alter('email', email, req, res, params, setActionItemMessage, (err, email) => {
             if (err) {
               return reject(err);
             }
@@ -502,7 +520,7 @@ module.exports = (formio) => {
           debug.send(`message.sendEach: ${message.sendEach}`);
           // debug.send(`email: ${JSON.stringify(email)}`);
           if (message.sendEach === true) {
-            const addresses = _.uniq(email.to.split(',').map(_.trim));
+            const addresses = _.uniq(email.to.split(',').map(_.trim)).filter(address=>address.length&&address.length>0);
             // debug.send(`addresses: ${JSON.stringify(addresses)}`);
             // Make a copy of the email for each recipient.
             emails = addresses.map((address) => Object.assign({}, email, {to: address}));
@@ -524,26 +542,26 @@ module.exports = (formio) => {
               );
             }));
           }, Promise.resolve());
-        });
+      });
 
-        const throttledSendEmails = _.throttle(sendEmails , NON_PRIORITY_QUEUE_TIMEOUT);
+      const throttledSendEmails = _.throttle(sendEmails , NON_PRIORITY_QUEUE_TIMEOUT);
 
-        if (req.user) {
-          return sendEmails()
-            .then((response) => next(null, response))
-            .catch((err) => {
-              debug.error(err);
-              return next(err);
-            });
-        }
-     else {
-      throttledSendEmails()
-        .catch((err) => {
-          debug.error(err);
-          return next(err);
-        });
+      if (req.user) {
+        return sendEmails()
+          .then((response) => next(null, response))
+          .catch((err) => {
+            debug.error(err);
+            return next(err);
+          });
+      }
+      else {
+        throttledSendEmails()
+          .catch((err) => {
+            debug.error(err);
+            return next(err);
+          });
         return next();
-     }
+      }
     });
   };
 

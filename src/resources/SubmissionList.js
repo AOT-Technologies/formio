@@ -7,8 +7,8 @@ module.exports = {
         const userRoles = req.user.roles.map((id) => ObjectId(id)); 
 
         // submissionIds taking from req.body
-        const submissionIds = req.body.id
-          ? req.body.id.map((id) => ObjectId(id.trim()))
+        const submissionIds = req.body.submissionIds
+          ? req.body.submissionIds.map((id) => ObjectId(id.trim()))
           : []; 
 
           const pipeline = [
@@ -45,9 +45,15 @@ module.exports = {
                 ],
               },
             },
+            {
+              "$project":{
+                formDetails:0
+              }
+            }
           ];
         // mongo query execute
-        router.formio.resources.submission.model.aggregate(pipeline).then((result)=>res.json(result))
+        const result = await router.formio.resources.submission.model.aggregate(pipeline)
+        res.json(result)
       } catch (error) {
         next(error);
       }

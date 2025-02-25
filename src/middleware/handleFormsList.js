@@ -26,15 +26,17 @@ module.exports = function (router) {
         query._id = { $in: req.query.formIds.split(",") };
         delete req.query.formIds;
       }
-
-      // Ensure role-based access check
-      query.access = {
-        $elemMatch: {
-          'type': 'read_all',
-          'roles': { $in: req.user.roles }
+      if(!req.isAdmin){
+        // Ensure role-based access check
+        query.access = {
+          $elemMatch: {
+            'type': 'read_all',
+            'roles': { $in: req.user.roles }
+          }
         }
       }
-      if(process.env.MULTI_TENANCY_ENABLED == "true" ){
+      
+      if(process.env.MULTI_TENANCY_ENABLED == "true" && !req.isAdmin){
         if(!req.token?.tenantKey){
           return res.sendStatus(401);
         }

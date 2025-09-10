@@ -37,10 +37,15 @@ module.exports = function (router) {
       }
       
       if(process.env.MULTI_TENANCY_ENABLED == "true" && !req.isAdmin){
-        if(!req.token?.tenantKey){
+        // For anonymous users (no token), skip tenant key check for form submissions
+        // Only enforce tenant key for authenticated users
+        if(req.token && !req.token.tenantKey){
           return res.sendStatus(401);
         }
-        req.query.tenantKey = req.token.tenantKey
+        // Only set tenantKey if token exists and has tenantKey
+        if(req.token?.tenantKey){
+          req.query.tenantKey = req.token.tenantKey
+        }
       }
       // Merge any additional query parameters
       req.query = { ...query, ...req.query };

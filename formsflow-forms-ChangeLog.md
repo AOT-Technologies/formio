@@ -11,7 +11,7 @@
 - `Known Issues`: Existing issues or problems that are acknowledged and will be addressed in subsequent updates.
 # Version 7.3.0
 ### Fixed
-- Fixed the tenant key handling for authenticated vs anonymous users.
+- Fixed tenant key handling for authenticated vs anonymous users [FWF-5328].
 # Version 7.1.0
 ### Added
 - Added FORMIO_JWT_EXPIRE env for handling token expire time

@@ -18,8 +18,8 @@ const debug = (...args)=> {
  * @param next
  * @returns {*}
  */
-module.exports = function(router) {
-  return function bootstrapNewRoleAccess(req, res, next) {
+module.exports = function (router) {
+  return async function bootstrapNewRoleAccess(req, res, next) {
     const hook = require('../util/hook')(router.formio);
 
     // Only bootstrap existing form access on Role creation.
@@ -34,62 +34,70 @@ module.exports = function(router) {
      *
      * @param done
      */
-    const updateForms = function(_role, done) {
-      const query = hook.alter('roleQuery', {deleted: {$eq: null}}, req);
+    const updateForms = async function (_role, done) {
+      const query = hook.alter('roleQuery', { deleted: { $eq: null } }, req);
 
       // Query the forms collection, to build the updated form access list.
-      router.formio.resources.form.model.find(query).exec(function(err, forms) {
-        if (err) {
-          debug(err);
-          return done(err);
-        }
+      try {
+        const forms = await router.formio.resources.form.model.find(query).exec();
         if (!forms || forms.length === 0) {
           return done();
         }
 
-        async.eachSeries(forms, function(form, formDone) {
-          // Add the new roleId to the access list for read_all (form).
-          form.access = form.access || [];
-          let found = false;
-          for (let a = 0; a < form.access.length; a++) {
-            if (form.access[a].type === 'read_all') {
-              form.access[a].roles = form.access[a].roles || [];
-              form.access[a].roles.push(_role);
-              form.access[a].roles = _.uniq(form.access[a].roles);
-              found = true;
-            }
-          }
-
-          // The read_all permission type was not previously added.
-          if (!found) {
-            form.access.push({
-              type: 'read_all',
-              roles: [_role]
-            });
-          }
-
-          // Save the updated permissions.
-          router.formio.resources.form.model.updateOne({
-            _id: form._id},
-            {$set: {access: form.access}},
-            (err)=> {
-              if (err) {
-                debug(err);
-                return formDone(err);
+        async.eachSeries(
+          forms,
+          async function (form) {
+            // Add the new roleId to the access list for read_all (form).
+            form.access = form.access || [];
+            let found = false;
+            for (let a = 0; a < form.access.length; a++) {
+              if (form.access[a].type === 'read_all') {
+                form.access[a].roles = form.access[a].roles || [];
+                form.access[a].roles.push(_role);
+                form.access[a].roles = _.uniq(form.access[a].roles);
+                found = true;
               }
-              formDone(null, form);
-            });
-        }, done);
-      });
+            }
+
+            // The read_all permission type was not previously added.
+            if (!found) {
+              form.access.push({
+                type: 'read_all',
+                roles: [
+                  _role,
+                ],
+              });
+            }
+
+            // Save the updated permissions.
+            await router.formio.resources.form.model.updateOne(
+              {
+                _id: form._id,
+              },
+              { $set: { access: form.access } },
+            );
+          },
+          done,
+        );
+      } catch (err) {
+        debug(err);
+        return done(err);
+      }
     };
 
     const bound = [];
-    const fns = hook.alter('newRoleAccess', [updateForms], req);
-    fns.forEach(function(f) {
+    const fns = await hook.alter(
+      'newRoleAccess',
+      [
+        updateForms,
+      ],
+      req,
+    );
+    fns.forEach(function (f) {
       bound.push(async.apply(f, roleId));
     });
 
-    async.series(bound, function(err, result) {
+    async.series(bound, function (err) {
       if (err) {
         debug(err);
         return next(err);

@@ -8,11 +8,11 @@ const logger = require('../util/logger')('formio:alias');
  *
  * Middleware to resolve a form alias into its components.
  */
-module.exports = function(router) {
+module.exports = function (router) {
   // Setup the reserved forms regex.
   if (!router.formio.config.reservedForms || !router.formio.config.reservedForms.length) {
-    /* eslint-disable max-len */
     router.formio.config.reservedForms = [
+      'submissions',
       'submission',
       'exists',
       'export',
@@ -23,11 +23,11 @@ module.exports = function(router) {
       'access',
       'token',
       'recaptcha',
+      'captcha',
       'action',
       'actionItem',
-      'tag'
+      'tag',
     ];
-    /* eslint-enable max-len */
   }
 
   /* eslint-disable no-useless-escape */
@@ -35,30 +35,37 @@ module.exports = function(router) {
   /* eslint-enable no-useless-escape */
   
   // Handle the request.
-  return function aliasHandler(req, res, next) {
+  return async function aliasHandler(req, res, next) {
     // Allow a base url to be provided to the alias handler.
     const baseUrl = aliasHandler.baseUrl ? aliasHandler.baseUrl(req) : '';
 
     // Get the alias from the request.
-    let alias = url.parse(req.url).pathname.substr(baseUrl.length).replace(formsRegEx, '').substr(1);
+    let alias = url
+      .parse(req.url)
+      .pathname.substr(baseUrl.length)
+      .replace(formsRegEx, '')
+      .substr(1);
     alias = router.formio.hook.alter('alias', alias, req, res);
 
     // If this is normal request, then pass this middleware.
     /* eslint-disable no-useless-escape */
     //this custom endpoint written for formsflow
     const customEndpoint = new Set(["checkpoint", "forms/search", "submissions"])
-    if (!alias || alias.match(/^(form$|form[\?\/])/) || alias === 'spec.json' || customEndpoint.has(alias) || alias ===  'config.json') {
+    if (
+      !alias ||
+      alias.match(/^(form$|form[\?\/])/) ||
+      alias === 'spec.json' ||
+      customEndpoint.has(alias) ||
+      alias === 'config.json'
+    ) {
       return next();
     }
     /* eslint-enable no-useless-escape */
 
     // Now load the form by alias.
-    router.formio.cache.loadFormByAlias(req, alias, function(error, form) {
-      if (error) {
-        debug(`Error: ${error}`);
-        logger.error(`Error: ${error}`);
-        return res.status(400).send('Invalid alias');
-      }
+    try {
+      const form = await router.formio.cache.loadFormByAlias(req, alias);
+
       if (!form) {
         return res.status(404).send('Form not found.');
       }
@@ -76,7 +83,11 @@ module.exports = function(router) {
 
       // Create the new URL for the project.
       req.url = `${baseUrl}/form/${form._id}${additional}`;
-      next();
-    });
+      return next();
+    } catch (err) {
+      debug(`Error: ${err}`);
+      logger.error(`Error: ${err}`);
+      return res.status(400).send('Invalid alias');
+    }
   };
 };

@@ -733,7 +733,7 @@ module.exports = function(router) {
       skip = true;
     }
     if (req.method === 'GET') {
-    const whitelist = ['/health', '/current', '/logout', '/access', '/token', '/recaptcha'];
+      const whitelist = ['/health', '/current', '/logout', '/access', '/token', '/recaptcha', '/submission'];
       skip = _.some(whitelist, function(path) {
         if ((url === path) || (url === hook.alter('path', path, req))) {
           return true;
@@ -810,7 +810,9 @@ module.exports = function(router) {
         res.status(401);
         return next();
       }
-      return res.headersSent ? next() : res.sendStatus(401);
+
+      // return res.headersSent ? next() : res.sendStatus(401);
+      return next()
     });
   };
 };

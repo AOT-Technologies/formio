@@ -811,8 +811,7 @@ module.exports = function(router) {
         return next();
       }
 
-      // return res.headersSent ? next() : res.sendStatus(401);
-      return next()
+      return res.headersSent ? next() : res.sendStatus(401);
     });
   };
 };

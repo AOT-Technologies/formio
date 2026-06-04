@@ -22,10 +22,10 @@
   "schema": "3.1.4",
   "templateVersion": "2.0.0",
   "dependencies": {
-    "@formio/core": "https://github.com/formio/core.git#main",
-    "@formio/js": "https://github.com/formio/formio.js.git#main",
+    "@formio/core": "^2.7.0",
+    "@formio/js": "^5.4.0",
     "@formio/node-fetch-http-proxy": "^1.1.0",
-    "@formio/vm": "https://github.com/formio/vm#main",
+    "@formio/vm": "^2.1.0",
     "@sendgrid/mail": "^7.7.0",
     "adm-zip": "^0.5.9",
     "async": "^3.2.4",

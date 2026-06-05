@@ -40,7 +40,10 @@ ENV PATH /app/node_modules/.bin:$PATH
 COPY package-lock.json /app/package-lock.json
 COPY package.json /app/package.json
 
-RUN npm install --production
+# Install all deps (devDeps needed for webpack/build:vm), build VM bundle, then prune devDeps
+RUN npm ci --ignore-scripts && \
+    npm run build:vm && \
+    npm prune --omit=dev
 
 RUN apk del git
 

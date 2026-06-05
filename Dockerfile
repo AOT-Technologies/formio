@@ -36,9 +36,8 @@ RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.co
 # add `/app/node_modules/.bin` to $PATH
 ENV PATH /app/node_modules/.bin:$PATH
 
-## Include details of the required dependencies
-COPY package-lock.json /app/package-lock.json
-COPY package.json /app/package.json
+# Copy full source first (webpack needs src/vm/entries + config at build time)
+COPY . /app/
 
 # Install all deps (devDeps needed for webpack/build:vm), build VM bundle, then prune devDeps
 RUN npm ci --ignore-scripts && \
@@ -51,8 +50,6 @@ RUN apk del git
 #   DEBUG=formio:db (see index.js for more)
 #   DEBUG=formio:*
 ENV DEBUG=""
-
-COPY . /app/
 
 
 # This will initialize the application based on

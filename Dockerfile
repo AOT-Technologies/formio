@@ -39,10 +39,8 @@ ENV PATH /app/node_modules/.bin:$PATH
 # Copy full source first (webpack needs src/vm/entries + config at build time)
 COPY . /app/
 
-# Install all deps (devDeps needed for webpack/build:vm), build VM bundle, then prune devDeps
-RUN npm ci --ignore-scripts && \
-    npm run build:vm && \
-    npm prune --omit=dev
+# Install all deps: compiles native addons (isolated-vm), runs prepare (build:vm), then prune devDeps
+RUN npm ci && npm prune --omit=dev
 
 RUN apk del git
 

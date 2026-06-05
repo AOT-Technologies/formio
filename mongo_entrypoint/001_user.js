@@ -1,16 +1,3 @@
-require('dotenv').config();
-const user  = process.env("MONGO_INITDB_ROOT_USERNAME");
-const password = process.env("MONGO_INITDB_ROOT_PASSWORD");
-
-db.createUser(
-    {
-        user: user,
-        pwd:  password,
-        roles:[
-            {
-                role: "readWrite",
-                db:  "admin"
-            }
-        ]
-    }
-);
+// MongoDB shell init script (runs in mongo shell, not Node.js — no require/process.env())
+// Admin root user is already created by MONGO_INITDB_ROOT_USERNAME/PASSWORD env vars.
+// This is a no-op placeholder kept for compatibility.

@@ -8,18 +8,17 @@
  * @returns {Function}
  */
 module.exports = function (router) {
-  return function (req, res, next) {
-    router.formio.cache.loadForm(
-      req,
-      null,
-      router.formio.cache.getCurrentFormId(req),
-      function (err, form) {
-        if (err) {
-          return next(err);
-        }
-        req.isBundle = form.isBundle;
-        next();
-      }
-    );
+  return async function (req, res, next) {
+    try {
+      const form = await router.formio.cache.loadForm(
+        req,
+        null,
+        router.formio.cache.getCurrentFormId(req)
+      );
+      req.isBundle = form && form.isBundle;
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 };

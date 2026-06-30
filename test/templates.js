@@ -79,7 +79,7 @@ module.exports = (app, template, hook) => {
 
           // Prepare the stored roles for comparison.
           let machineName = role.machineName;
-          given[machineName] = _.omit(role, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName']);
+          given[machineName] = _.omit(role, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName', 'designer', 'tenantKey']);
 
           project.roles[machineName] = project.roles[role._id] = role;
         });

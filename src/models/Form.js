@@ -310,10 +310,6 @@ module.exports = (formio) => {
   model.schema.index(hook.alter('schemaIndex', { type: 1, deleted: 1, modified: -1 }));
   model.schema.index(hook.alter('schemaIndex', { name: 1, deleted: 1 }));
 
-  model.schema.index({
-    deleted: 1,
-  });
-
   // Add machineName to the schema.
   model.schema.plugin(require('../plugins/machineName')('form', formio));
 

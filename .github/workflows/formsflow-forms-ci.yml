@@ -30,4 +30,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     - run: npm ci
-    - run: npm test
+    - name: Run tests
+      run: npm test
+      env:
+        ROOT_EMAIL: admin@example.com
+        ROOT_PASSWORD: Changeme1!

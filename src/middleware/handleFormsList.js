@@ -18,15 +18,12 @@ module.exports = function (router) {
     if (req.path === "/form" && req.method === "GET") {
       const query = {};
 
-      if(!req.user?.roles){
-        return res.sendStatus(401);
-      }
       // If specific formIds are provided, include them in query
       if (req.query.formIds) {
         query._id = { $in: req.query.formIds.split(",") };
         delete req.query.formIds;
       }
-      if(!req.isAdmin){
+      if(req.user?.roles && !req.isAdmin){
         // Look up the anonymous (default) role so authenticated users can also see
         // forms that are readable by unauthenticated users.
         const defaultRole = await router.formio.resources.role.model

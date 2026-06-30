@@ -45,6 +45,13 @@ module.exports = function (router) {
       for (const form of forms) {
         // Add the new roleId to the access list for read_all (form).
         form.access = form.access || [];
+
+        // Skip forms with no access defined — they have no pre-existing permissions
+        // to inherit the new role into, so leave them untouched.
+        if (form.access.length === 0) {
+          continue;
+        }
+
         let found = false;
         for (let a = 0; a < form.access.length; a++) {
           if (form.access[a].type === 'read_all') {

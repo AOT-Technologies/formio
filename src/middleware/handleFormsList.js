@@ -27,13 +27,25 @@ module.exports = function (router) {
         delete req.query.formIds;
       }
       if(!req.isAdmin){
-        // Ensure role-based access check
-        query.access = {
-          $elemMatch: {
-            'type': 'read_all',
-            'roles': { $in: req.user.roles }
-          }
+        // Look up the anonymous (default) role so authenticated users can also see
+        // forms that are readable by unauthenticated users.
+        const defaultRole = await router.formio.resources.role.model
+          .findOne({ default: true, deleted: { $eq: null } })
+          .lean()
+          .select('_id')
+          .exec();
+
+        const rolesToCheck = [...(req.user.roles || [])];
+        if (defaultRole) {
+          rolesToCheck.push(defaultRole._id);
         }
+
+        // Include forms where the user's effective roles (or anonymous) have
+        // explicit read_all access, OR forms with no read_all restriction at all.
+        query.$or = [
+          { 'access': { $elemMatch: { 'type': 'read_all', 'roles': { $in: rolesToCheck } } } },
+          { 'access': { $not: { $elemMatch: { 'type': 'read_all' } } } },
+        ];
       }
       
       if(process.env.MULTI_TENANCY_ENABLED == "true" && !req.isAdmin){

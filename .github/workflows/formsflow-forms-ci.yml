@@ -16,6 +16,12 @@ jobs:
       matrix:
         node-version: [22.x]
 
+    services:
+      mongodb:
+        image: mongo:5
+        ports:
+          - 27017:27017
+
     steps:
     - uses: actions/checkout@v4
     - name: Use Node.js ${{ matrix.node-version }}

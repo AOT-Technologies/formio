@@ -32,7 +32,7 @@ module.exports = function (router) {
           req.bundledForm = form;
         }
 
-        util.removeProtectedFields(form, action, res.resource.item, req.doNotMinify || req.query.full, req.token);
+        util.removeProtectedFields(form, action, res.resource.item, req.doNotMinify || req.full || req.query.full, req.token);
         return next();
       } catch (err) {
         return next(err);

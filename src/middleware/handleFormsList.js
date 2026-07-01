@@ -41,7 +41,7 @@ module.exports = function (router) {
         // explicit read_all access, OR forms with no read_all restriction at all.
         query.$or = [
           { 'access': { $elemMatch: { 'type': 'read_all', 'roles': { $in: rolesToCheck } } } },
-          { 'access': { $not: { $elemMatch: { 'type': 'read_all' } } } },
+          { 'access.type': { $nin: ['read_all'] } },
         ];
       }
       

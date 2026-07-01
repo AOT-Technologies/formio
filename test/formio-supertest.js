@@ -14,7 +14,13 @@ const request = (app) => {
   _request.use(
     captureError((error, test) => {
       try {
-        error.message += '\n\nResponse: ' + JSON.stringify(JSON.parse(test.res.text), null, 4);
+        let body;
+        try {
+          body = JSON.parse(test.res.text);
+        } catch {
+          body = test.res.text;
+        }
+        error.message += '\n\nResponse: ' + JSON.stringify(body, null, 4);
       } catch (err) {
         console.warn(err);
       }

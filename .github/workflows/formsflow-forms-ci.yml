@@ -1,5 +1,5 @@
 
-name: formflow-forms
+name: formsflow-forms
 
 on:
   push:
@@ -14,16 +14,24 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: [22.x]
+
+    services:
+      mongodb:
+        image: mongo:5
+        ports:
+          - 27017:27017
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     - run: npm ci
-    
-    
-    
+    - name: Run tests
+      run: npm test
+      env:
+        ROOT_EMAIL: admin@example.com
+        ROOT_PASSWORD: Changeme1!

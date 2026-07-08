@@ -2,3 +2,17 @@
 bower_components
 node_modules
 logs
+.github
+.circleci
+.vscode
+Dockerfile
+docker-compose.yml
+.eslintrc
+.bithoundrc
+.eslintignore
+.dccache
+portal
+.nyc_output
+.nycrc
+coverage
+welcome.txt

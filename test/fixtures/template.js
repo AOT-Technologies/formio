@@ -18,19 +18,24 @@ module.exports = () => {
     title: 'Admin Register',
     name: 'adminRegister',
     path: 'admin/register',
+    pdfComponents: [],
     type: 'form',
     tags: [],
     access: [
       {
         type: 'read_all',
-        roles: ['anonymous']
-      }
+        roles: [
+          'anonymous',
+        ],
+      },
     ],
     submissionAccess: [
       {
         type: 'create_own',
-        roles: ['anonymous']
-      }
+        roles: [
+          'anonymous',
+        ],
+      },
     ],
     components: [
       {
@@ -46,7 +51,7 @@ module.exports = () => {
         label: 'Email',
         inputType: 'email',
         tableView: true,
-        input: true
+        input: true,
       },
       {
         type: 'password',
@@ -59,7 +64,7 @@ module.exports = () => {
         label: 'Password',
         inputType: 'password',
         tableView: false,
-        input: true
+        input: true,
       },
       {
         theme: 'primary',
@@ -72,9 +77,9 @@ module.exports = () => {
         key: 'submit',
         label: 'Submit',
         input: true,
-        type: 'button'
-      }
-    ]
+        type: 'button',
+      },
+    ],
   };
 
   // Create an email template.
@@ -83,15 +88,19 @@ module.exports = () => {
     title: 'Email',
     form: 'user',
     priority: 0,
-    method: ['create'],
-    handler: ['after'],
+    method: [
+      'create',
+    ],
+    handler: [
+      'after',
+    ],
     settings: {
       transport: 'test',
       from: defaultEmail,
       emails: '{{ data.email }}',
       subject: 'New user {{ _id }} created',
-      message: 'Email: {{ data.email }}'
-    }
+      message: 'Email: {{ data.email }}',
+    },
   };
 
   // Create a register action for this form.
@@ -100,15 +109,20 @@ module.exports = () => {
     title: 'Save Submission',
     form: 'adminRegister',
     priority: 11,
-    method: ['create', 'update'],
-    handler: ['before'],
+    method: [
+      'create',
+      'update',
+    ],
+    handler: [
+      'before',
+    ],
     settings: {
       resource: 'admin',
       fields: {
         email: 'email',
-        password: 'password'
-      }
-    }
+        password: 'password',
+      },
+    },
   };
 
   template.actions['adminRegister:login'] = {
@@ -116,16 +130,22 @@ module.exports = () => {
     title: 'Login',
     form: 'adminRegister',
     priority: 2,
-    method: ['create'],
-    handler: ['before'],
+    method: [
+      'create',
+    ],
+    handler: [
+      'before',
+    ],
     settings: {
-      resources: ['admin'],
+      resources: [
+        'admin',
+      ],
       username: 'email',
       password: 'password',
       allowedAttempts: 5,
       attemptWindow: 10,
-      lockWait: 10
-    }
+      lockWait: 10,
+    },
   };
 
   // Create some circularly dependent resources to make sure
@@ -135,6 +155,7 @@ module.exports = () => {
     type: 'resource',
     name: 'a',
     path: 'a',
+    pdfComponents: [],
     tags: [],
     components: [
       {
@@ -152,13 +173,13 @@ module.exports = () => {
         protected: false,
         persistent: true,
         validate: {
-          required: false
+          required: false,
         },
-        type: 'resource'
-      }
+        type: 'resource',
+      },
     ],
     access: [],
-    submissionAccess: []
+    submissionAccess: [],
   };
 
   template.resources.b = {
@@ -166,13 +187,14 @@ module.exports = () => {
     type: 'resource',
     name: 'b',
     path: 'b',
+    pdfComponents: [],
     tags: [],
     components: [
       {
         isNew: false,
         type: 'resource',
         validate: {
-          required: false
+          required: false,
         },
         persistent: true,
         protected: false,
@@ -186,11 +208,11 @@ module.exports = () => {
         key: 'a',
         label: 'A',
         tableView: true,
-        input: true
-      }
+        input: true,
+      },
     ],
     access: [],
-    submissionAccess: []
+    submissionAccess: [],
   };
 
   // Add some users.
@@ -200,8 +222,8 @@ module.exports = () => {
       token: '',
       data: {
         email: 'admin@example.com',
-        password: 'test123'
-      }
+        password: 'test123',
+      },
     },
 
     // A administrator of this User-created Project.
@@ -209,8 +231,8 @@ module.exports = () => {
       token: '',
       data: {
         email: 'admin2@example.com',
-        password: 'test123'
-      }
+        password: 'test123',
+      },
     },
 
     // A user of this User-created Project.
@@ -218,8 +240,8 @@ module.exports = () => {
       token: '',
       data: {
         email: 'user1@example.com',
-        password: 'test123'
-      }
+        password: 'test123',
+      },
     },
 
     // A user of this User-created Project.
@@ -227,9 +249,9 @@ module.exports = () => {
       token: '',
       data: {
         email: 'user2@example.com',
-        password: 'test123'
-      }
-    }
+        password: 'test123',
+      },
+    },
   };
 
   return template;

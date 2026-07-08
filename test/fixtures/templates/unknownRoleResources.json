@@ -30,17 +30,22 @@
       "type": "form",
       "name": "foo",
       "path": "foo",
+      "pdfComponents": [],
       "tags": [],
       "access": [
         {
           "type": "read_all",
-          "roles": ["unknown"]
+          "roles": [
+            "unknown"
+          ]
         }
       ],
       "submissionAccess": [
         {
-          "type" : "create_own",
-          "roles" : ["unknown"]
+          "type": "create_own",
+          "roles": [
+            "unknown"
+          ]
         }
       ],
       "components": [

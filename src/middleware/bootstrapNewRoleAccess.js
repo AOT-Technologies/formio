@@ -1,5 +1,4 @@
 'use strict';
-const async = require('async');
 const _ = require('lodash');
 
 const debug = (...args)=> {
@@ -18,8 +17,8 @@ const debug = (...args)=> {
  * @param next
  * @returns {*}
  */
-module.exports = function(router) {
-  return function bootstrapNewRoleAccess(req, res, next) {
+module.exports = function (router) {
+  return async function bootstrapNewRoleAccess(req, res, next) {
     const hook = require('../util/hook')(router.formio);
 
     // Only bootstrap existing form access on Role creation.
@@ -32,70 +31,62 @@ module.exports = function(router) {
     /**
      * Async function to add the new role to the read_all access of each form.
      *
-     * @param done
+     * @param _role
      */
-    const updateForms = function(_role, done) {
-      const query = hook.alter('roleQuery', {deleted: {$eq: null}}, req);
+    const updateForms = async function (_role) {
+      const query = hook.alter('roleQuery', { deleted: { $eq: null } }, req);
 
       // Query the forms collection, to build the updated form access list.
-      router.formio.resources.form.model.find(query).exec(function(err, forms) {
-        if (err) {
-          debug(err);
-          return done(err);
-        }
-        if (!forms || forms.length === 0) {
-          return done();
-        }
-
-        async.eachSeries(forms, function(form, formDone) {
-          // Add the new roleId to the access list for read_all (form).
-          form.access = form.access || [];
-          let found = false;
-          for (let a = 0; a < form.access.length; a++) {
-            if (form.access[a].type === 'read_all') {
-              form.access[a].roles = form.access[a].roles || [];
-              form.access[a].roles.push(_role);
-              form.access[a].roles = _.uniq(form.access[a].roles);
-              found = true;
-            }
-          }
-
-          // The read_all permission type was not previously added.
-          if (!found) {
-            form.access.push({
-              type: 'read_all',
-              roles: [_role]
-            });
-          }
-
-          // Save the updated permissions.
-          router.formio.resources.form.model.updateOne({
-            _id: form._id},
-            {$set: {access: form.access}},
-            (err)=> {
-              if (err) {
-                debug(err);
-                return formDone(err);
-              }
-              formDone(null, form);
-            });
-        }, done);
-      });
-    };
-
-    const bound = [];
-    const fns = hook.alter('newRoleAccess', [updateForms], req);
-    fns.forEach(function(f) {
-      bound.push(async.apply(f, roleId));
-    });
-
-    async.series(bound, function(err, result) {
-      if (err) {
-        debug(err);
-        return next(err);
+      const forms = await router.formio.resources.form.model.find(query).exec();
+      if (!forms || forms.length === 0) {
+        return;
       }
 
+      for (const form of forms) {
+        // Add the new roleId to the access list for read_all (form).
+        form.access = form.access || [];
+
+        // Skip forms with no access defined — they have no pre-existing permissions
+        // to inherit the new role into, so leave them untouched.
+        if (form.access.length === 0) {
+          continue;
+        }
+
+        let found = false;
+        for (let a = 0; a < form.access.length; a++) {
+          if (form.access[a].type === 'read_all') {
+            form.access[a].roles = form.access[a].roles || [];
+            form.access[a].roles.push(_role);
+            form.access[a].roles = _.uniq(form.access[a].roles);
+            found = true;
+          }
+        }
+
+        // The read_all permission type was not previously added.
+        if (!found) {
+          form.access.push({
+            type: 'read_all',
+            roles: [_role],
+          });
+        }
+
+        // Save the updated permissions.
+        await router.formio.resources.form.model.updateOne(
+          { _id: form._id },
+          { $set: { access: form.access } },
+        );
+      }
+    };
+
+    try {
+      const fns = await hook.alter('newRoleAccess', [updateForms], req);
+      for (const f of fns) {
+        await f(roleId);
+      }
       return next();
-    });
+    } catch (err) {
+      debug(err);
+      return next(err);
+    }
   };
 };

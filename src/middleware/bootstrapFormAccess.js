@@ -34,8 +34,15 @@ module.exports = function (router) {
 
     // Query the roles collection, to build the updated form access list.
     try {
+      const roleQuery = hook.alter('roleQuery', { deleted: { $eq: null } }, req);
+
+      // Scope to this tenant's roles only — prevents cross-tenant role leakage.
+      if (process.env.MULTI_TENANCY_ENABLED === 'true' && req.body && req.body.tenantKey) {
+        roleQuery.tenantKey = req.body.tenantKey;
+      }
+
       let roles = await router.formio.resources.role.model
-        .find(hook.alter('roleQuery', { deleted: { $eq: null } }, req))
+        .find(roleQuery)
         .lean()
         .exec();
       if (!roles || roles.length === 0) {

@@ -1,4 +1,5 @@
 'use strict';
+
 const _ = require('lodash');
 
 const debug = (...args)=> {
@@ -28,13 +29,14 @@ module.exports = function (router) {
 
     const roleId = res.resource.item._id.toString();
 
-    /**
-     * Async function to add the new role to the read_all access of each form.
-     *
-     * @param _role
-     */
     const updateForms = async function (_role) {
       const query = hook.alter('roleQuery', { deleted: { $eq: null } }, req);
+
+      // Scope to this tenant's forms only — prevents cross-tenant form contamination.
+      const newRole = res.resource.item;
+      if (process.env.MULTI_TENANCY_ENABLED === 'true' && newRole.tenantKey) {
+        query.tenantKey = newRole.tenantKey;
+      }
 
       // Query the forms collection, to build the updated form access list.
       const forms = await router.formio.resources.form.model.find(query).exec();
@@ -43,7 +45,6 @@ module.exports = function (router) {
       }
 
       for (const form of forms) {
-        // Add the new roleId to the access list for read_all (form).
         form.access = form.access || [];
 
         // Skip forms with no access defined — they have no pre-existing permissions
@@ -62,7 +63,6 @@ module.exports = function (router) {
           }
         }
 
-        // The read_all permission type was not previously added.
         if (!found) {
           form.access.push({
             type: 'read_all',

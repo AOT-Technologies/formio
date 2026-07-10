@@ -1,5 +1,4 @@
 'use strict';
-const _ = require('lodash');
 
 const debug = (...args)=> {
   require('debug')('formio:middleware:bootstrapNewRoleAccess')(...args);
@@ -29,53 +28,35 @@ module.exports = function (router) {
     const roleId = res.resource.item._id.toString();
 
     /**
-     * Async function to add the new role to the read_all access of each form.
+     * Adds the new role to the read_all access of all existing forms using two
+     * bulk updateMany operations — O(1) MongoDB round-trips regardless of form count.
      *
-     * @param _role
+     * Previously this iterated every form and issued a sequential updateOne per document,
+     * blocking the POST /role response for O(N) time. With large form collections (production
+     * multi-tenant deployments) that caused tenant creation to time out.
+     *
+     * @param _role {string} - the new role's _id as a string
      */
     const updateForms = async function (_role) {
       const query = hook.alter('roleQuery', { deleted: { $eq: null } }, req);
+      const FormModel = router.formio.resources.form.model;
 
-      // Query the forms collection, to build the updated form access list.
-      const forms = await router.formio.resources.form.model.find(query).exec();
-      if (!forms || forms.length === 0) {
-        return;
-      }
+      // Case 1: forms that already have a read_all entry — add the role atomically.
+      await FormModel.updateMany(
+        { ...query, access: { $elemMatch: { type: 'read_all' } } },
+        { $addToSet: { 'access.$[elem].roles': _role } },
+        { arrayFilters: [{ 'elem.type': 'read_all' }] },
+      );
 
-      for (const form of forms) {
-        // Add the new roleId to the access list for read_all (form).
-        form.access = form.access || [];
-
-        // Skip forms with no access defined — they have no pre-existing permissions
-        // to inherit the new role into, so leave them untouched.
-        if (form.access.length === 0) {
-          continue;
-        }
-
-        let found = false;
-        for (let a = 0; a < form.access.length; a++) {
-          if (form.access[a].type === 'read_all') {
-            form.access[a].roles = form.access[a].roles || [];
-            form.access[a].roles.push(_role);
-            form.access[a].roles = _.uniq(form.access[a].roles);
-            found = true;
-          }
-        }
-
-        // The read_all permission type was not previously added.
-        if (!found) {
-          form.access.push({
-            type: 'read_all',
-            roles: [_role],
-          });
-        }
-
-        // Save the updated permissions.
-        await router.formio.resources.form.model.updateOne(
-          { _id: form._id },
-          { $set: { access: form.access } },
-        );
-      }
+      // Case 2: forms with non-empty access but no read_all entry — create one.
+      await FormModel.updateMany(
+        {
+          ...query,
+          'access.0': { $exists: true },
+          access: { $not: { $elemMatch: { type: 'read_all' } } },
+        },
+        { $push: { access: { type: 'read_all', roles: [_role] } } },
+      );
     };
 
     try {

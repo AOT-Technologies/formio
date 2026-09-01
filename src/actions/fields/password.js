@@ -16,7 +16,15 @@ module.exports = (formio) => {
     });
   };
 
-  return async (component, data, handler, action, {validation, path, req, res}) => {
+  const getCurrentSubmission = async (req) => {
+    const submission = await formio.cache.loadCurrentSubmission(req);
+    if (!submission) {
+      throw new Error('No submission found.');
+    }
+    return submission;
+  };
+
+  return async (component, data, handler, action, { validation, path, req, res }) => {
     switch (handler) {
       case 'beforeGet':
         req.modelQuery.select(`-data.${path}${component.key}`);
@@ -24,8 +32,8 @@ module.exports = (formio) => {
       case 'beforePut':
         // Only perform password encryption after validation has occurred.
         if (validation) {
-          return new Promise((resolve, reject) => {
-            if (_.has(data, component.key)) {
+          if (_.has(data, component.key)) {
+            return new Promise((resolve, reject) => {
               encryptField(component, data, (err) => {
                 if (err) {
                   return reject(err);
@@ -37,28 +45,24 @@ module.exports = (formio) => {
                   }
 
                   if (!req.skipTokensInvalidation) {
-                    _.set(req.body, 'metadata.jwtIssuedAfter', req.tokenIssued || Math.trunc(Date.now() / 1000));
+                    _.set(
+                      req.body,
+                      'metadata.jwtIssuedAfter',
+                      req.tokenIssued || Math.trunc(Date.now() / 1000),
+                    );
                   }
                   resolve();
                 });
               });
-            }
-            else {
-              // If there is no password provided.
-              // Load the current submission.
-              formio.cache.loadCurrentSubmission(req, function cacheResults(err, submission) {
-                if (err) {
-                  return reject(err);
-                }
-                if (!submission) {
-                  return reject(new Error('No submission found.'));
-                }
+            });
+          } else {
+            // If there is no password provided.
+            // Load the current submission.
 
-                _.set(data, component.key, _.get(submission.data, path));
-                return resolve();
-              });
-            }
-          });
+            const submission = await getCurrentSubmission(req);
+            _.set(data, component.key, _.get(submission.data, path));
+            return;
+          }
         }
         break;
       case 'beforePost':

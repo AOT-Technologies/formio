@@ -16,79 +16,76 @@ let _ = require('lodash');
  * @param tools
  * @param done
  */
-module.exports = function(db, config, tools, done) {
+module.exports = function (db, config, tools, done) {
   let roleCollection = db.collection('roles');
 
-  async.series([
-    function checkDefaultRole(callback) {
-      roleCollection.countDocuments({deleted: {$eq: null}, default: true}, function(err, count) {
-        if (err) {
-          return callback(err);
-        }
-
-        // Insert the default role
-        if (count === 0) {
-          roleCollection.insertOne({
-            title: 'Default',
-            description: 'The Default Role.',
-            deleted: null,
-            admin: false,
-            default: true
-          }, function(err, response) {
-            if (err) {
-              return next(err);
+  async.series(
+    [
+      function checkDefaultRole(callback) {
+        roleCollection
+          .countDocuments({ deleted: { $eq: null }, default: true })
+          .then((count) => {
+            // Insert the default role
+            if (count === 0) {
+              roleCollection
+                .insertOne({
+                  title: 'Default',
+                  description: 'The Default Role.',
+                  deleted: null,
+                  admin: false,
+                  default: true,
+                })
+                .then((response) => {
+                  callback();
+                })
+                .catch((err) => next(err));
             }
+            // Default role exists.
+            else if (count === 1) {
+              return callback();
+            } else {
+              console.log('Unknown count of the default role: ' + count);
+              return callback();
+            }
+          })
+          .catch((err) => callback(err));
+      },
+      function checkAdminRole(callback) {
+        roleCollection
+          .countDocuments({ deleted: { $eq: null }, admin: true })
+          .then((count) => {
+            // Insert the default role
+            if (count === 0) {
+              roleCollection
+                .insertOne({
+                  title: 'Administrator',
+                  description: 'The Administrator Role.',
+                  deleted: null,
+                  admin: true,
+                  default: false,
+                })
+                .then((response) => {
+                  callback();
+                })
+                .catch((err) => next(err));
+            }
+            // Default role exists.
+            else if (count === 1) {
+              return callback();
+            } else {
+              console.log('Unknown count of the admin role: ' + count);
+              return callback();
+            }
+          })
+          .catch((err) => callback(err));
+      },
+    ],
+    function (err) {
+      if (err) {
+        return done(err);
+      }
 
-            callback();
-          });
-        }
-        // Default role exists.
-        else if (count === 1) {
-          return callback();
-        }
-        else {
-          console.log('Unknown count of the default role: ' + count);
-          return callback();
-        }
-      });
+      done();
     },
-    function checkAdminRole(callback) {
-      roleCollection.countDocuments({deleted: {$eq: null}, admin: true}, function(err, count) {
-        if (err) {
-          return callback(err);
-        }
-
-        // Insert the default role
-        if (count === 0) {
-          roleCollection.insertOne({
-            title: 'Administrator',
-            description: 'The Administrator Role.',
-            deleted: null,
-            admin: true,
-            default: false
-          }, function(err, response) {
-            if (err) {
-              return next(err);
-            }
-
-            callback();
-          });
-        }
-        // Default role exists.
-        else if (count === 1) {
-          return callback();
-        }
-        else {
-          console.log('Unknown count of the admin role: ' + count);
-          return callback();
-        }
-      });
-    }
-  ], function(err) {
-    if (err) {
-      return done(err);
-    }
-
-    done();
-  });
+  );
 };

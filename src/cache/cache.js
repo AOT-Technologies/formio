@@ -80,13 +80,15 @@ module.exports = function (router) {
      */
     async loadForm(req, type, id, noCachedResult) {
       const cache = this.cache(req);
+      // Strip CR/LF before logging to prevent user-controlled input from forging log entries.
+      const safeId = String(id).replace(/[\r\n]/g, '');
       if (!noCachedResult && cache.forms[id]) {
-        debug.loadForm(`Cache hit: ${id}`);
-        logger.loadForm.info(`Cache hit: ${id}`);
+        debug.loadForm(`Cache hit: ${safeId}`);
+        logger.loadForm.info(`Cache hit: ${safeId}`);
         return cache.forms[id];
       }
-      logger.loadForm.info(`${typeof id}: ${id}`);
-      debug.loadForm(`${typeof id}: ${id}`);
+      logger.loadForm.info(`${typeof id}: ${safeId}`);
+      debug.loadForm(`${typeof id}: ${safeId}`);
       id = util.idToBson(id);
       if (id === false) {
         const err = new Error('Invalid form _id given.');

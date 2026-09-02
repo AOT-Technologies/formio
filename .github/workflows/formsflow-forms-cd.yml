@@ -30,7 +30,12 @@ jobs:
           VER=$(cat VERSION)
           VER=${VER/-alpha/''}
           echo "VERSION=$VER" >> $GITHUB_ENV
-      
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: formsflow/forms-flow-forms
+          tags: ${{ env.VERSION }}
       - run: echo ${{ env.VERSION }}
       
       - name: Get Docker token

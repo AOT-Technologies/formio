@@ -482,6 +482,7 @@ const Utils = {
     } catch (ignoreErr) {
       debug.idToBson(`Unknown _id given: ${_id}, typeof: ${typeof _id}`);
       logger.idToBson.error(`Unknown _id given: ${_id}, typeof: ${typeof _id}`);
+      _id = false;
     }
 
     return _id;

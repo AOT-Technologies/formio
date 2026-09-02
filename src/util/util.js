@@ -1,79 +1,27 @@
 'use strict';
-require('@azure/ms-rest-nodeauth');
 
 const mongoose = require('mongoose');
+const moment = require('moment');
 const ObjectID = require('mongodb').ObjectId;
 const _ = require('lodash');
 const nodeUrl = require('url');
 const deleteProp = require('delete-property').default;
-const workerUtils = require('formio-workers/workers/util');
 const errorCodes = require('./error-codes.js');
 const fetch = require('@formio/node-fetch-http-proxy');
-const {VM} = require('vm2');
+const { mockBrowserContext } = require('@formio/vm');
+mockBrowserContext();
+const Formio = require('@formio/js');
 const debug = {
   idToBson: require('debug')('formio:util:idToBson'),
   getUrlParams: require('debug')('formio:util:getUrlParams'),
-  removeProtectedFields: require('debug')('formio:util:removeProtectedFields')
+  removeProtectedFields: require('debug')('formio:util:removeProtectedFields'),
+  uniqueMachineName: require('debug')('formio:util:uniqueMachineName'),
 };
 
 const logger = {
   idToBson: require('../util/logger.js')('formio:util:idToBson'),
   getUrlParams: require('../util/logger.js')('formio:util:getUrlParams'),
-  removeProtectedFields: require('../util/logger.js')('formio:util:removeProtectedFields')
-};
-
-
-// Define a few global noop placeholder shims and import the component classes
-global.Text              = class {};
-global.HTMLElement       = class {};
-global.HTMLCanvasElement = class {};
-global.navigator         = {userAgent: ''};
-global.document          = {
-  createElement: () => ({}),
-  cookie: '',
-  getElementsByTagName: () => [],
-  documentElement: {
-    style: [],
-    firstElementChild: {appendChild: () => {}}
-  }
-};
-global.window            = {addEventListener: () => {}, Event: function() {}, navigator: global.navigator};
-global.btoa = (str) => {
-  return (str instanceof Buffer) ?
-    str.toString('base64') :
-    Buffer.from(str.toString(), 'binary').toString('base64');
-};
-global.self = global;
-const Formio = require('formiojs/formio.form.js');
-global.Formio = Formio.Formio;
-
-// Remove onChange events from all renderer displays.
-_.each(Formio.Displays.displays, (display) => {
-  display.prototype.onChange = _.noop;
-});
-
-const vm = new VM({
-  timeout: 250,
-  sandbox: {
-    result: null,
-  },
-  fixAsync: true
-});
-
-Formio.Utils.Evaluator.noeval = true;
-Formio.Utils.Evaluator.evaluator = function(func, args) {
-  return function() {
-    let result = null;
-    /* eslint-disable no-empty */
-    try {
-      vm.freeze(args, 'args');
-
-      result = vm.run(`result = (function({${_.keys(args).join(',')}}) {${func}})(args);`);
-    }
-    catch (err) {}
-    /* eslint-enable no-empty */
-    return result;
-  };
+  removeProtectedFields: require('../util/logger.js')('formio:util:removeProtectedFields'),
 };
 
 const Utils = {
@@ -92,9 +40,7 @@ const Utils = {
       return;
     }
 
-    /* eslint-disable */
     console.log(content);
-    /* eslint-enable */
   },
 
   /**
@@ -105,10 +51,9 @@ const Utils = {
   isBoolean(value) {
     if (typeof value === 'boolean') {
       return true;
-    }
-    else if (typeof value === 'string') {
+    } else if (typeof value === 'string') {
       value = value.toLowerCase();
-      return (value === 'true') || (value === 'false');
+      return value === 'true' || value === 'false';
     }
     return false;
   },
@@ -123,7 +68,7 @@ const Utils = {
       return value;
     }
     if (typeof value === 'string') {
-      return (value.toLowerCase() === 'true');
+      return value.toLowerCase() === 'true';
     }
     return !!value;
   },
@@ -135,9 +80,7 @@ const Utils = {
    *   The content to pass to console.error.
    */
   error(content) {
-    /* eslint-disable */
     console.error(content);
-    /* eslint-enable */
   },
 
   /**
@@ -154,7 +97,7 @@ const Utils = {
     }
     return {
       alias: alias,
-      additional: additional
+      additional: additional,
     };
   },
 
@@ -166,7 +109,7 @@ const Utils = {
    */
   escapeRegExp(str) {
     /* eslint-disable */
-    return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+    return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
     /* eslint-enable */
   },
 
@@ -190,7 +133,7 @@ const Utils = {
       status: (status) => {
         subResponse.statusCode = status;
         return subResponse;
-      }
+      },
     };
     return subResponse;
   },
@@ -255,6 +198,18 @@ const Utils = {
    * @param {String} path
    */
   eachComponent: Formio.Utils.eachComponent.bind(Formio.Utils),
+
+  /**
+ * Iterates through each component as well as its data, and triggers a callback for every component along
+ * with the contextual data for that component in addition to the absolute path for that component.
+ * @param components - The array of JSON components to iterate through.
+ * @param data - The contextual data object for the components.
+ * @param fn - The callback function to trigger for each component following the signature (component, data, row, path, components, index, parent).
+ * @param parent - The parent component.
+ * @param includeAll
+ * @returns
+ */
+  eachComponentData: Formio.Utils.eachComponentData.bind(Formio.Utils),
 
   /**
    * Get a component by its key
@@ -341,20 +296,13 @@ const Utils = {
    */
   ObjectId(id) {
     try {
-      return _.isObject(id)
-        ? id
-        : mongoose.Types.ObjectId(id);
-    }
-    catch (e) {
+      return _.isObject(id) ? id : new ObjectID(id);
+    } catch (ignoreErr) {
       return id;
     }
   },
 
-  flattenComponentsForRender: workerUtils.flattenComponentsForRender.bind(workerUtils),
-  renderFormSubmission: workerUtils.renderFormSubmission.bind(workerUtils),
-  renderComponentValue: workerUtils.renderComponentValue.bind(workerUtils),
-
-/**
+  /**
    * Search the request headers for the given key.
    *
    * @param req
@@ -366,7 +314,7 @@ const Utils = {
    *   The header value if found or false.
    */
   getHeader(req, key) {
-    if (typeof req.headers[key] !== 'undefined') {
+    if (req.headers && typeof req.headers[key] !== 'undefined') {
       return req.headers[key];
     }
 
@@ -385,7 +333,7 @@ const Utils = {
    *   The query value if found or false.
    */
   getQuery(req, key) {
-    if (typeof req.query[key] !== 'undefined') {
+    if (req.query && typeof req.query[key] !== 'undefined') {
       return req.query[key];
     }
 
@@ -404,7 +352,7 @@ const Utils = {
    *   The parameter value if found or false.
    */
   getParameter(req, key) {
-    if (typeof req.params[key] !== 'undefined') {
+    if (req.params && typeof req.params[key] !== 'undefined') {
       return req.params[key];
     }
 
@@ -469,13 +417,13 @@ const Utils = {
     parts = _.tail(parts);
 
     // Url is not symmetric, add an empty value for the last key.
-    if ((parts.length % 2) !== 0) {
+    if (parts.length % 2 !== 0) {
       parts.push('');
     }
 
     // Build key/value list.
     for (let a = 0; a < parts.length; a += 2) {
-      urlParams[parts[a]] = parts[a + 1];
+      urlParams[parts[a].toLowerCase()] = parts[a + 1];
     }
 
     debug.getUrlParams(urlParams);
@@ -530,11 +478,8 @@ const Utils = {
    */
   idToBson(_id) {
     try {
-      _id = _.isObject(_id)
-        ? _id
-        : mongoose.Types.ObjectId(_id);
-    }
-    catch (e) {
+      _id = _.isObject(_id) ? _id : new mongoose.Types.ObjectId(_id);
+    } catch (ignoreErr) {
       debug.idToBson(`Unknown _id given: ${_id}, typeof: ${typeof _id}`);
       logger.idToBson.error(`Unknown _id given: ${_id}, typeof: ${typeof _id}`);
     }
@@ -552,9 +497,7 @@ const Utils = {
    *   The mongo string id.
    */
   idToString(_id) {
-    return _.isObject(_id)
-      ? _id.toString()
-      : _id;
+    return _.isObject(_id) ? _id.toString() : _id;
   },
   toMongoId(id) {
     id = id || '';
@@ -563,6 +506,32 @@ const Utils = {
       str += id[i].charCodeAt(0).toString(16);
     }
     return _.padEnd(str.substr(0, 24), 24, '0');
+  },
+
+  /**
+   * Ensures that data has MongoDB ObjectID's for all "_id" fields.
+   * @param data
+   * @return {boolean}
+   */
+  transformIdsToObjectIds(data) {
+    if (!data || !_.isObject(data)) {
+      return;
+    }
+    _.each(data, (value, key) => {
+      if (!value) {
+        return;
+      }
+      if (_.isArray(value)) {
+        value.forEach((arrayEl) => Utils.transformIdsToObjectIds(arrayEl));
+      } else if (_.isObject(value)) {
+        Utils.ensureIds(value);
+      } else if (key === '_id' && typeof value === 'string' && ObjectID.isValid(value)) {
+        const bsonId = Utils.idToBson(value);
+        if (bsonId) {
+          data[key] = bsonId;
+        }
+      }
+    });
   },
 
   /**
@@ -580,20 +549,15 @@ const Utils = {
         return;
       }
       if (_.isArray(value)) {
-        changed = value.reduce((subchanged, row) => {
-          return Utils.ensureIds(row) || subchanged;
-        }, false) || changed;
-      }
-      else if (_.isObject(value)) {
+        changed =
+          value.reduce((subchanged, row) => {
+            return Utils.ensureIds(row) || subchanged;
+          }, false) || changed;
+      } else if (_.isObject(value)) {
         changed = Utils.ensureIds(value) || changed;
-      }
-      else if (
-        (
-          (key === '_id') ||
-          (key === 'form') ||
-          (key === 'owner')
-        ) &&
-        (typeof value === 'string') &&
+      } else if (
+        (key === '_id' || key === 'form' || key === 'owner') &&
+        typeof value === 'string' &&
         ObjectID.isValid(value)
       ) {
         const bsonId = Utils.idToBson(value);
@@ -608,52 +572,54 @@ const Utils = {
 
   removeProtectedFields(form, action, submissions, doNotMinify, token) {
     if (!Array.isArray(submissions)) {
-      submissions = [submissions];
+      submissions = [
+        submissions,
+      ];
     }
 
     // Initialize our delete fields array.
     const modifyFields = [];
 
     // Iterate through all components.
-    this.eachComponent(form.components, (component, path) => {
-      path = `data.${path}`;
-      const roles = token?.user?.customRoles || [] 
-      const displayForRole =  component?.properties?.displayForRole;
-      //need to check multiple roles
-      if (component.protected ||  (displayForRole && !roles.includes(displayForRole))) {
-        debug.removeProtectedFields('Removing protected field:', component.key);
-        logger.removeProtectedFields.info('Removing protected field:', component.key);
-        modifyFields.push(deleteProp(path));
-      }
-      else if ((component.type === 'signature') && (action === 'index') && !doNotMinify) {
-        modifyFields.push(((submission) => {
-          const data = _.get(submission, path);
-          _.set(submission, path, (!data || (data.length < 25)) ? '' : 'YES');
-        }));
-      }
-      else if (component.type === 'file' && action === 'index' && !doNotMinify) {
-        modifyFields.push(((submission) => {
-          const data = _.map(
-            _.get(submission, path),
-            (file) => {
+    this.eachComponent(
+      form.components,
+      (component, path) => {
+        path = `data.${path}`;
+        const roles = token?.user?.customRoles || [];
+        const displayForRole = component?.properties?.displayForRole;
+        // need to check multiple roles
+        if (component.protected || (displayForRole && !roles.includes(displayForRole))) {
+          debug.removeProtectedFields('Removing protected field:', component.key);
+          logger.removeProtectedFields.info('Removing protected field:', component.key);
+          modifyFields.push(deleteProp(path));
+        } else if (component.type === 'signature' && action === 'index' && !doNotMinify) {
+          modifyFields.push((submission) => {
+            const data = _.get(submission, path);
+            if (!_.isUndefined(data)) {
+              _.set(submission, path, !data || data.length < 25 ? '' : 'YES');
+            }
+          });
+        } else if (component.type === 'file' && action === 'index' && !doNotMinify) {
+          modifyFields.push((submission) => {
+            const data = _.map(_.get(submission, path), (file) => {
               if (file && file.url && file.url.startsWith('data:')) {
                 return _.omit(file, 'url');
               }
               return file;
-            }
-          );
-          _.set(submission, path, data);
-        }));
-      }
-    }, true);
+            });
+            _.set(submission, path, data);
+          });
+        }
+      },
+      true,
+    );
 
     // Iterate through each submission once.
     submissions.forEach((submission) =>
-      modifyFields.forEach((modifyField) => modifyField(submission))
+      modifyFields.forEach((modifyField) => modifyField(submission)),
     );
   },
 
-  /* eslint-disable new-cap */
   base64: {
     /**
      * Base64 encode the given data.
@@ -678,9 +644,8 @@ const Utils = {
      */
     decode(encoded) {
       return new Buffer.from(encoded.toString()).toString('ascii');
-    }
+    },
   },
-  /* eslint-enable new-cap */
 
   /**
    * Retrieve a unique machine name
@@ -691,18 +656,30 @@ const Utils = {
    * @param next
    * @return {*}
    */
-  uniqueMachineName(document, model, next) {
+  async uniqueMachineName(document, model, next) {
     var query = {
-      machineName: {$regex: `^${document.machineName}[0-9]*$`},
-      deleted: {$eq: null}
+      machineName: { $regex: `^${_.escapeRegExp(document.machineName)}[0-9]*$` },
+      deleted: { $eq: null },
     };
     if (document._id) {
-      query._id = {$ne: document._id};
+      query._id = { $ne: document._id };
     }
 
-    model.find(query).lean().exec((err, records) => {
-      if (err) {
-        return next(err);
+    try {
+      let records;
+      try {
+        records = await model.find(query).hint({ machineName: 1, deleted: 1 }).lean().exec();
+      }
+      catch (err) {
+        // Fallback if bad hint or index not found
+        if (err.code === 2 || err.code === 291) {
+          records = await model.find(query).lean().exec();
+          debug.uniqueMachineName(
+            `Hint rejected (code ${err.code}) on ${model.modelName}; falling back to non-hinted query.`,
+          );
+        } else {
+          throw err;
+        }
       }
 
       if (!records || !records.length) {
@@ -718,8 +695,10 @@ const Utils = {
         }
       });
       document.machineName += ++i;
-      next();
-    });
+      return next();
+    } catch (err) {
+      return next(err);
+    }
   },
 
   castValue(valueType, value) {
@@ -731,13 +710,15 @@ const Utils = {
       case 'boolean':
         return value === 'true';
       case '[number]':
-        return value.replace(/(^,)|(,$)/g, '')
-                         .split(',')
-                         .map(val => Number(val));
+        return value
+          .replace(/(^,)|(,$)/g, '')
+          .split(',')
+          .map((val) => Number(val));
       case '[string]':
-        return value.replace(/(^,)|(,$)/g, '')
-                         .split(',')
-                         .map(val => val.toString());
+        return value
+          .replace(/(^,)|(,$)/g, '')
+          .split(',')
+          .map((val) => val.toString());
     }
   },
 
@@ -760,18 +741,19 @@ const Utils = {
   ],
 
   /*eslint max-depth: ["error", 4]*/
-  eachValue(
-    components,
-    data,
-    fn,
-    context,
-    path = '',
-  ) {
+  eachValue(components, data, fn, context, path = '', fullPath = '') {
     components.forEach((component) => {
       if (component) {
         if (Array.isArray(component.components)) {
           // If tree type is an array of objects like datagrid and editgrid.
-          if (['datagrid', 'editgrid', 'dynamicWizard'].includes(component.type) || component.arrayTree) {
+          if (
+            [
+              'datagrid',
+              'editgrid',
+              'dynamicWizard',
+            ].includes(component.type) ||
+            component.arrayTree
+          ) {
             const value = _.get(data, component.key) || [];
             if (Array.isArray(value)) {
               value.forEach((row, index) => {
@@ -784,8 +766,11 @@ const Utils = {
                 );
               });
             }
-          }
-          else if (['form'].includes(component.type)) {
+          } else if (
+            [
+              'form',
+            ].includes(component.type)
+          ) {
             this.eachValue(
               component.components,
               _.get(data, `${component.key}.data`, {}),
@@ -793,13 +778,11 @@ const Utils = {
               context,
               this.valuePath(path, `${component.key}.data`),
             );
-          }
-          else if (
-            ['container'].includes(component.type) ||
-            (
-              component.tree &&
-              !this.layoutComponents.includes(component.type)
-            )
+          } else if (
+            [
+              'container',
+            ].includes(component.type) ||
+            (component.tree && !this.layoutComponents.includes(component.type))
           ) {
             this.eachValue(
               component.components,
@@ -807,19 +790,19 @@ const Utils = {
               fn,
               context,
               this.valuePath(path, component.key),
+              this.valuePath(fullPath, component.key),
             );
-          }
-          else {
+          } else {
             this.eachValue(
               component.components,
               data,
               fn,
               context,
               path,
+              this.valuePath(fullPath, component.key),
             );
           }
-        }
-        else if (Array.isArray(component.columns)) {
+        } else if (Array.isArray(component.columns)) {
           // Handle column like layout components.
           component.columns.forEach((column) => {
             this.eachValue(
@@ -828,10 +811,10 @@ const Utils = {
               fn,
               context,
               path,
+              this.valuePath(fullPath, component.key),
             );
           });
-        }
-        else if (Array.isArray(component.rows)) {
+        } else if (Array.isArray(component.rows)) {
           // Handle table like layout components.
           component.rows.forEach((row) => {
             if (Array.isArray(row)) {
@@ -842,6 +825,7 @@ const Utils = {
                   fn,
                   context,
                   path,
+                  this.valuePath(fullPath, component.key),
                 );
               });
             }
@@ -855,15 +839,99 @@ const Utils = {
         data,
         component,
         path,
+        fullPath,
       });
     });
   },
-  markModifiedParameters: (item, modifiedParameters)=>{
-    modifiedParameters.map((parameter)=>{
+  markModifiedParameters: (item, modifiedParameters) => {
+    modifiedParameters.map((parameter) => {
       if (item[parameter]) {
         item.markModified(parameter);
       }
     });
+  },
+  // Skips hook execution in case of no hook by provided name found
+  // Pass as the last argument to formio.hook.alter() function
+  skipHookIfNotExists: () => _.noop(),
+
+  coerceQueryTypes(query, currentForm, prefix = 'data.') {
+    _.assign(
+      query,
+      _(query)
+        .omit('limit', 'skip', 'select', 'sort', 'populate')
+        .mapValues((value, name) => {
+          // Skip filters not looking at component data
+          if (!name.startsWith(prefix)) {
+            return value;
+          }
+
+          // Get the filter object.
+          const filter = _.zipObject(
+            [
+              'name',
+              'selector',
+            ],
+            name.split('__'),
+          );
+          // Convert to component key
+          const key = Utils.getFormComponentKey(filter.name).substring(prefix.length);
+          const component = Utils.getComponent(currentForm.components, key);
+          // Coerce these queries to proper data type
+          if (component) {
+            switch (component.type) {
+              case 'number':
+              case 'currency':
+                return Number(value);
+              case 'checkbox':
+                return value !== 'false';
+              case 'datetime': {
+                const date = moment.utc(
+                  value,
+                  [
+                    'YYYY-MM-DD',
+                    'YYYY-MM',
+                    'YYYY',
+                    'x',
+                    moment.ISO_8601,
+                  ],
+                  true,
+                );
+
+                if (date.isValid()) {
+                  return date.toDate();
+                }
+                return;
+              }
+              case 'select': {
+                if (Number(value) || value === '0') {
+                  return Number(value);
+                }
+                return value;
+              }
+              case 'selectboxes': {
+                if (['true', 'false'].includes(value)) {
+                  return value !== 'false';
+                }
+              }
+            }
+          }
+          if (
+            !component &&
+            [
+              'true',
+              'false',
+            ].includes(value)
+          ) {
+            return value !== 'false';
+          }
+          return value;
+        })
+        .value(),
+    );
+  },
+  getServerConfig() {
+    const hook = require('../util/hook')(Formio);
+    return hook.alter('getServerConfig') || require('../../config/default.cjs');
   },
 };
 

@@ -1,6 +1,5 @@
 'use strict';
 
-const async = require('async');
 const util = require('../util/util');
 
 /**
@@ -9,183 +8,167 @@ const util = require('../util/util');
  * This script should do the basic install process for formio. It should be modified to match whatever the most recent
  * update is expecting.
  */
-module.exports = function(db, config, next) {
+module.exports = async function (db, config) {
   util.log(' > Performing install.');
 
-  async.parallel([
-    function(cb) {
-      // Create actions collections exist.
-      db.createCollection('actions', null, function(err, collection) {
-        if (err) {
-          return cb(err);
-        }
+  async function createActionsCollection () {
+    // Create actions collections exist.
+    const collection = await db.createCollection('actions', null);
+    await collection.createIndexes([
+      {
+        key: {
+          form: 1,
+        },
+        name: 'form_1',
+      },
+      {
+        key: {
+          priority: 1,
+          title: 1,
+        },
+        name: 'priority_1_title_1',
+      },
+    ]);
+  };
 
-        collection.createIndexes([
-          {
-            key: {
-              'form' : 1
-            },
-            name: 'form_1'
-          }
-        ], cb);
-      });
-    },
-    function(cb) {
-      // Create projects collections exist.
-      db.createCollection('projects', null, function(err, collection) {
-        if (err) {
-          return cb(err);
-        }
+  async function createProjectsCollection () {
+    // Create projects collections exist.
+    const collection = await db.createCollection('projects', null);
+    await collection.createIndexes([
+      {
+        key: {
+          name: 1,
+        },
+        name: 'name_1',
+      },
+      {
+        key: {
+          'access.id': 1,
+        },
+        name: 'access.id_1',
+      },
+      {
+        key: {
+          owner: 1,
+        },
+        name: 'owner_1',
+      },
+    ]);
+  };
 
-        collection.createIndexes([
-          {
-            key: {
-              'name' : 1
-            },
-            name: 'name_1'
-          },
-          {
-            key: {
-              'access.id' : 1
-            },
-            name: 'access.id_1'
-          },
-          {
-            key: {
-              'owner' : 1
-            },
-            name: 'owner_1'
-          }
-        ], cb);
-      });
-    },
-    function(cb) {
-      // Create forms collections exist.
-      db.createCollection('forms', null, function(err, collection) {
-        if (err) {
-          return cb(err);
-        }
+  async function createFormsCollection () {
+    // Create forms collections exist.
+    const collection = await db.createCollection('forms', null);
+    await collection.createIndexes([
+      {
+        key: {
+          name: 1,
+        },
+        name: 'name_1',
+      },
+      {
+        key: {
+          project: 1,
+        },
+        name: 'project_1',
+      },
+      {
+        key: {
+          version: 1,
+        },
+        name: 'version_1',
+      },
+      {
+        key: {
+          path: 1,
+        },
+        name: 'path_1',
+      },
+      {
+        key: {
+          type: 1,
+        },
+        name: 'type_1',
+      },
+      {
+        key: {
+          'access.id': 1,
+        },
+        name: 'access.id_1',
+      },
+      {
+        key: {
+          owner: 1,
+        },
+        name: 'owner_1',
+      },
+    ]);
+  };
 
-        collection.createIndexes([
-          {
-            key: {
-              'name' : 1
-            },
-            name: 'name_1'
-          },
-          {
-            key: {
-              'project' : 1
-            },
-            name: 'project_1'
-          },
-          {
-            key: {
-              'version' : 1
-            },
-            name: 'version_1'
-          },
-          {
-            key: {
-              'path' : 1
-            },
-            name: 'path_1'
-          },
-          {
-            key: {
-              'type' : 1
-            },
-            name: 'type_1'
-          },
-          {
-            key: {
-              'access.id' : 1
-            },
-            name: 'access.id_1'
-          },
-          {
-            key: {
-              'owner' : 1
-            },
-            name: 'owner_1'
-          }
-        ], cb);
-      });
-    },
-    function(cb) {
-      // Create roles collections exist.
-      db.createCollection('roles', null, function(err, collection) {
-        if (err) {
-          return cb(err);
-        }
+  async function createRolesCollection () {
+    // Create roles collections exist.
+    const collection = await db.createCollection('roles', null);
+    await collection.createIndexes([
+      {
+        key: {
+          project: 1,
+        },
+        name: 'project_1',
+      },
+    ]);
+  };
 
-        collection.createIndexes([
-          {
-            key: {
-              'project' : 1
-            },
-            name: 'project_1'
-          }
-        ], cb);
-      });
-    },
-    function(cb) {
-      // Create schema collections exist.
-      db.createCollection('schema', null, function(err, collection) {
-        if (err) {
-          return cb(err);
-        }
+  async function createSchemaCollection () {
+    // Create schema collections exist.
+    const collection = await db.createCollection('schema', null);
+    await collection.createIndexes([
+      {
+        key: {
+          key: 1,
+        },
+        name: 'key_1',
+      },
+    ]);
+    await collection.insertOne({ key: 'formio', isLocked: false, version: config.schema });
+  };
 
-        collection.createIndexes([
-          {
-            key: {
-              'key' : 1
-            },
-            name: 'key_1'
-          }
-        ], function(err, result) {
-          if (err) {
-            return cb(err);
-          }
+  async function createSubmissionsCollection () {
+    // Create submissions collections exist.
+    const collection = await db.createCollection('submissions', null);
+    await collection.createIndexes([
+      {
+        key: {
+          form: 1,
+        },
+        name: 'form_1',
+      },
+      {
+        key: {
+          'access.id': 1,
+        },
+        name: 'access.id_1',
+      },
+      {
+        key: {
+          owner: 1,
+        },
+        name: 'owner_1',
+      },
+      {
+        key: {
+          roles: 1,
+        },
+        name: 'roles_1',
+      },
+    ]);
+  };
 
-          collection.insertOne({key: 'formio', isLocked: false, version: config.schema}, cb);
-        });
-      });
-    },
-    function(cb) {
-      // Create submissions collections exist.
-      db.createCollection('submissions', null, function(err, collection) {
-        if (err) {
-          return cb(err);
-        }
-
-        collection.createIndexes([
-          {
-            key: {
-              'form' : 1
-            },
-            name: 'form_1'
-          },
-          {
-            key: {
-              'access.id' : 1
-            },
-            name: 'access.id_1'
-          },
-          {
-            key: {
-              'owner' : 1
-            },
-            name: 'owner_1'
-          },
-          {
-            key: {
-              'roles' : 1
-            },
-            name: 'roles_1'
-          }
-        ], cb);
-      });
-    }
-  ], next);
+  await Promise.all([
+    createActionsCollection(),
+    createProjectsCollection(),
+    createFormsCollection(),
+    createRolesCollection(),
+    createSchemaCollection(),
+    createSubmissionsCollection(),
+  ]);
 };

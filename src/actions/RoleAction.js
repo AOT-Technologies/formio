@@ -7,7 +7,7 @@ const debug = {
   addRole: require('debug')('formio:action:role#addRole'),
   removeRole: require('debug')('formio:action:role#removeRole'),
   roleManipulation: require('debug')('formio:action:role#roleManipulation'),
-  updateModel: require('debug')('formio:action:role#updateModel')
+  updateModel: require('debug')('formio:action:role#updateModel'),
 };
 const logger = {
   role: require('../util/logger')('formio:action:role'),
@@ -20,7 +20,7 @@ const logger = {
 
 const LOG_EVENT = 'Role Action';
 
-module.exports = function(router) {
+module.exports = function (router) {
   const Action = router.formio.Action;
   const hook = require('../util/hook')(router.formio);
   const util = router.formio.util;
@@ -43,95 +43,104 @@ module.exports = function(router) {
         description: 'Provides the Role Assignment capabilities.',
         priority: 1,
         defaults: {
-          handler: ['after'],
-          method: ['create']
+          handler: [
+            'after',
+          ],
+          method: [
+            'create',
+          ],
         },
         access: {
           handler: false,
-          method: false
-        }
+          method: false,
+        },
       });
     }
-    static settingsForm(req, res, next) {
-      router.formio.resources.role.model.find(hook.alter('roleQuery', {deleted: {$eq: null}}, req))
-        .sort({title: 1})
-        .lean()
-        .exec(function(err, roles) {
-          if (err || !roles) {
-            log(req, ecode.role.EROLESLOAD, err);
-            return res.status(400).send(ecode.role.EROLESLOAD);
-          }
+    static async settingsForm(req, res, next) {
+      try {
+        const roles = await router.formio.resources.role.model
+          .find(hook.alter('roleQuery', { deleted: { $eq: null } }, req))
+          .sort({ title: 1 })
+          .lean()
+          .exec();
+        if (!roles) {
+          log(req, ecode.role.EROLESLOAD, 'No roles');
+          return res.status(400).send(ecode.role.EROLESLOAD);
+        }
 
-          next(null, [
-            {
-              type: 'select',
-              input: true,
-              label: 'Resource Association',
-              key: 'association',
-              placeholder: 'Select the type of resource to perform role manipulation.',
-              template: '<span>{{ item.title }}</span>',
-              dataSrc: 'json',
-              data: {
-                json: JSON.stringify([
-                  {
-                    association: 'existing',
-                    title: 'Existing Resource'
-                  },
-                  {
-                    association: 'new',
-                    title: 'New Resource'
-                  }
-                ])
-              },
-              valueProperty: 'association',
-              multiple: false,
-              validate: {
-                required: true
-              }
+        return next(null, [
+          {
+            type: 'select',
+            input: true,
+            label: 'Resource Association',
+            key: 'association',
+            placeholder: 'Select the type of resource to perform role manipulation.',
+            template: '<span>{{ item.title }}</span>',
+            dataSrc: 'json',
+            data: {
+              json: JSON.stringify([
+                {
+                  association: 'existing',
+                  title: 'Existing Resource',
+                },
+                {
+                  association: 'new',
+                  title: 'New Resource',
+                },
+              ]),
             },
-            {
-              type: 'select',
-              input: true,
-              label: 'Action Type',
-              key: 'type',
-              placeholder: 'Select whether this Action will Add or Remove the contained Role.',
-              template: '<span>{{ item.title }}</span>',
-              dataSrc: 'json',
-              data: {
-                json: JSON.stringify([
-                  {
-                    type: 'add',
-                    title: 'Add Role'
-                  },
-                  {
-                    type: 'remove',
-                    title: 'Remove Role'
-                  }
-                ])
-              },
-              valueProperty: 'type',
-              multiple: false,
-              validate: {
-                required: true
-              }
+            valueProperty: 'association',
+            multiple: false,
+            validate: {
+              required: true,
             },
-            {
-              type: 'select',
-              input: true,
-              label: 'Role',
-              key: 'role',
-              placeholder: 'Select the Role that this action will Add or Remove.',
-              template: '<span>{{ item.title }}</span>',
-              dataSrc: 'json',
-              data: {json: roles},
-              valueProperty: '_id',
-              multiple: false,
-              validate: {
-                required: true
-              }
-            }
-          ]);
-        });
+          },
+          {
+            type: 'select',
+            input: true,
+            label: 'Action Type',
+            key: 'type',
+            placeholder: 'Select whether this Action will Add or Remove the contained Role.',
+            template: '<span>{{ item.title }}</span>',
+            dataSrc: 'json',
+            data: {
+              json: JSON.stringify([
+                {
+                  type: 'add',
+                  title: 'Add Role',
+                },
+                {
+                  type: 'remove',
+                  title: 'Remove Role',
+                },
+              ]),
+            },
+            valueProperty: 'type',
+            multiple: false,
+            validate: {
+              required: true,
+            },
+          },
+          {
+            type: 'select',
+            input: true,
+            label: 'Role',
+            key: 'role',
+            placeholder: 'Select the Role that this action will Add or Remove.',
+            template: '<span>{{ item.title }}</span>',
+            dataSrc: 'json',
+            data: { json: roles },
+            valueProperty: '_id',
+            multiple: false,
+            validate: {
+              required: true,
+            },
+          },
+        ]);
+      } catch (err) {
+        log(req, ecode.role.EROLESLOAD, err);
+        return res.status(400).send(ecode.role.EROLESLOAD);
+      }
     }
 
     /**
@@ -148,35 +157,55 @@ module.exports = function(router) {
      * @param next
      *   The callback function to execute upon completion.
      */
-    resolve(handler, method, req, res, next) {
+    async resolve(handler, method, req, res, next) {
       // Check the submission for the submissionId.
       if (this.settings.association !== 'existing' && this.settings.association !== 'new') {
-        return res.status(400).send('Invalid setting `association` for the RoleAction; expecting `new` or `existing`.');
+        return res
+          .status(400)
+          .send('Invalid setting `association` for the RoleAction; expecting `new` or `existing`.');
       }
       // Error if operation type is not valid.
-      if (!this.settings.type || (this.settings.type !== 'add' && this.settings.type !== 'remove')) {
-        return res.status(400).send('Invalid setting `type` for the RoleAction; expecting `add` or `remove`.');
+      if (
+        !this.settings.type ||
+        (this.settings.type !== 'add' && this.settings.type !== 'remove')
+      ) {
+        return res
+          .status(400)
+          .send('Invalid setting `type` for the RoleAction; expecting `add` or `remove`.');
       }
       // Error if no resource is being returned.
       if (
         this.settings.association === 'new' &&
         res.hasOwnProperty('resource') &&
-        !res.resource.item && this.settings.role
+        !res.resource.item &&
+        this.settings.role
       ) {
-        return res.status(400).send('Invalid resource was provided for RoleAction association of `new`.');
+        return res
+          .status(400)
+          .send('Invalid resource was provided for RoleAction association of `new`.');
       }
       // Error if association is existing and valid data was not provided.
-      if (this.settings.association === 'existing' && !(this.settings.role || req.submission.data.role)) {
-        return res.status(400).send(
-          'Missing role for RoleAction association of `existing`. Must specify role to assign in action settings ' +
-          'or a form component named `role`'
-        );
+      if (
+        this.settings.association === 'existing' &&
+        !(this.settings.role || req.submission.data.role)
+      ) {
+        return res
+          .status(400)
+          .send(
+            'Missing role for RoleAction association of `existing`. Must specify role to assign in action settings ' +
+              'or a form component named `role`',
+          );
       }
-      if (this.settings.association === 'existing' && !(req.submission.data.submission || res.resource.item)) {
-        return res.status(400).send(
-          'Missing submission for RoleAction association of `existing`. Form must have a resource field named ' +
-          '`submission`.'
-        );
+      if (
+        this.settings.association === 'existing' &&
+        !(req.submission.data.submission || res.resource.item)
+      ) {
+        return res
+          .status(400)
+          .send(
+            'Missing submission for RoleAction association of `existing`. Form must have a resource field named ' +
+              '`submission`.',
+          );
       }
 
       /**
@@ -187,23 +216,33 @@ module.exports = function(router) {
        * @param callback
        * @returns {*}
        */
-      const loadUser = function(submission, callback) {
-        const submissionModel = req.submissionModel || router.formio.resources.submission.model;
-        submissionModel.findOne(hook.alter('submissionQuery', {
-          _id: util.idToBson(submission),
-          deleted: {$eq: null}
-        }, req)).exec((err, user) => {
-          if (err) {
-            log(req, ecode.submission.ESUBLOAD, err);
-            return res.status(400).send(err.message || err);
-          }
+      const loadUser = async function (submission, callback) {
+        try {
+          const submissionModel = req.submissionModel || router.formio.resources.submission.model;
+          const user = await submissionModel
+            .findOne(
+              hook.alter(
+                'submissionQuery',
+                {
+                  _id: util.idToBson(submission),
+                  deleted: { $eq: null },
+                },
+                req,
+              ),
+            )
+            .exec();
           if (!user) {
-            log(req, ecode.submission.ENOSUB, err);
-            return res.status(400).send('No Submission was found with the given setting `submission`.');
+            log(req, ecode.submission.ENOSUB);
+            return res
+              .status(400)
+              .send('No Submission was found with the given setting `submission`.');
           }
 
           return callback(user);
-        });
+        } catch (err) {
+          log(req, ecode.submission.ESUBLOAD, err);
+          return res.status(400).send(err.message || err);
+        }
       };
 
       // Determine the resources based on the current request.
@@ -211,11 +250,8 @@ module.exports = function(router) {
       let role = {};
       if (this.settings.association === 'existing') {
         resource = req.submission.data.submission || res.resource.item;
-        role = this.settings.role
-          ? this.settings.role
-          : req.submission.data.role;
-      }
-      else if (this.settings.association === 'new') {
+        role = this.settings.role ? this.settings.role : req.submission.data.role;
+      } else if (this.settings.association === 'new') {
         resource = res.resource.item;
         role = this.settings.role;
       }
@@ -225,23 +261,24 @@ module.exports = function(router) {
        *
        * @param submission
        */
-      const updateModel = function(submission, association, update) {
+      const updateModel = async function (submission, association, update) {
         // Try to update the submission directly.
         debug.updateModel(association);
         logger.updateModel.info(association)
 
         const submissionModel = req.submissionModel || router.formio.resources.submission.model;
-        submissionModel.updateOne({
-          _id: submission._id
-        },
-        update,
-        (err) => {
-          if (err) {
-            log(req, ecode.submission.ESUBSAVE, err);
-            return next(err);
-          }
+        try {
+          await submissionModel.updateOne(
+            {
+              _id: submission._id,
+            },
+            update,
+          );
           return next();
-        });
+        } catch (err) {
+          log(req, ecode.submission.ESUBSAVE, err);
+          return next(err);
+        }
       };
 
       /**
@@ -253,13 +290,13 @@ module.exports = function(router) {
        *   The mongoose submission object to be mutated.
        * @returns {*}
        */
-      const addRole = function(role, submission, association) {
+      const addRole = async function (role, submission, association) {
         debug.addRole(`Role: ${role}`);
         logger.addRole.info(`Role: ${role}`);
 
         // The given role already exists in the resource.
         let compare = [];
-        _.each(_.get(submission, 'roles'), function(element) {
+        _.each(_.get(submission, 'roles'), function (element) {
           if (element) {
             compare.push(util.idToString(element));
           }
@@ -277,10 +314,10 @@ module.exports = function(router) {
         submission.roles = compare;
 
         const update = {
-          roles: compare
+          roles: compare,
         };
         // Update the submission model.
-        updateModel(submission, association, update);
+        await updateModel(submission, association, update);
       };
 
       /**
@@ -292,14 +329,14 @@ module.exports = function(router) {
        *   The mongoose submission object to be mutated.
        * @returns {*}
        */
-      const removeRole = function(role, submission, association) {
+      const removeRole = async function (role, submission, association) {
         debug.removeRole(`Role: ${role}`);
         logger.removeRole.info(`Role: ${role}`);
 
         // The given role does not exist in the resource.
         let compare = [];
         if (Array.isArray(submission.roles)) {
-          submission.roles.forEach(function(element) {
+          submission.roles.forEach(function (element) {
             if (element) {
               compare.push(util.idToString(element));
             }
@@ -318,9 +355,9 @@ module.exports = function(router) {
 
         // Update the submission model.
         const update = {
-          roles: compare
+          roles: compare,
         };
-        updateModel(submission, association, update);
+        await updateModel(submission, association, update);
       };
 
       /**
@@ -329,17 +366,14 @@ module.exports = function(router) {
        * @param type
        *   The type of role manipulation.
        */
-      const roleManipulation = function(type, association) {
+      const roleManipulation = async function (type, association) {
         debug.roleManipulation(`Type: ${type}`);
         logger.roleManipulation.info(`Type: ${type}`)
 
         // Confirm that the given/configured role is actually accessible.
-        const query = hook.alter('roleQuery', {_id: role, deleted: {$eq: null}}, req);
-        router.formio.resources.role.model.findOne(query).lean().exec((err, role) => {
-          if (err) {
-            log(req, ecode.role.EROLELOAD, err, '#roleManipulation');
-            return res.status(400).send(ecode.role.EROLELOAD);
-          }
+        const query = hook.alter('roleQuery', { _id: role, deleted: { $eq: null } }, req);
+        try {
+          let role = await router.formio.resources.role.model.findOne(query).lean().exec();
           if (!role) {
             log(req, ecode.role.ENOROLE, new Error(ecode.role.ENOROLE), '#roleManipulation');
             return res.status(400).send(ecode.role.ENOROLE);
@@ -348,12 +382,14 @@ module.exports = function(router) {
           role = role._id.toString();
           debug.roleManipulation(role);
           if (type === 'add') {
-            addRole(role, resource, association);
+            await addRole(role, resource, association);
+          } else if (type === 'remove') {
+            await removeRole(role, resource, association);
           }
-          else if (type === 'remove') {
-            removeRole(role, resource, association);
-          }
-        });
+        } catch (err) {
+          log(req, ecode.role.EROLELOAD, err, '#roleManipulation');
+          return res.status(400).send(ecode.role.EROLELOAD);
+        }
       };
 
       /**
@@ -367,13 +403,12 @@ module.exports = function(router) {
        * Resolve the action.
        */
       if (typeof resource === 'string') {
-        loadUser(resource, (user) => {
+        loadUser(resource, async (user) => {
           resource = user;
-          roleManipulation(this.settings.type, this.settings.association);
+          await roleManipulation(this.settings.type, this.settings.association);
         });
-      }
-      else {
-        roleManipulation(this.settings.type, this.settings.association);
+      } else {
+        await roleManipulation(this.settings.type, this.settings.association);
       }
     }
   }

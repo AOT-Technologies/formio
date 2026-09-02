@@ -10,20 +10,20 @@ const util = require('../util/util');
  * @returns {Function}
  */
 module.exports = function(router) {
-    return function(req, res, next) {
-      router.formio.cache.loadForm(req, null, req.formId, function(err, form) {
-        if (err) {
-          return next(err);
-        }
-        const previousSubmission = req.previousSubmission?.data; 
+    return async function(req, res, next) {
+      try {
+        const form = await router.formio.cache.loadForm(req, null, req.formId);
+        const previousSubmission = req.previousSubmission?.data;
         util.eachComponent(form.components, (component) => {
-             if(component.properties?.displayForRole){
-               if(!req.body?.data?.[component.key]){
-                req.body.data[component.key] = previousSubmission?.[component.key]
-               }
-             }
-        })
+          if (component.properties?.displayForRole) {
+            if (!req.body?.data?.[component.key]) {
+              req.body.data[component.key] = previousSubmission?.[component.key];
+            }
+          }
+        });
         next();
-      });
+      } catch (err) {
+        next(err);
+      }
     };
 };

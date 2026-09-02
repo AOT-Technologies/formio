@@ -81,6 +81,59 @@ jobs:
           tags: formsflow/forms-flow-forms:${{ env.VERSION }}, formsflow/forms-flow-forms:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
+      - name: Notify Google Chat - Success
+        if: ${{ success() }}
+        env:
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          curl --fail-with-body -X POST \
+            -H "Content-Type: application/json; charset=UTF-8" \
+            -d "$(jq -n \
+              --arg repository "${{ github.repository }}" \
+              --arg branch "${{ github.ref_name }}" \
+              --arg tags "$IMAGE_TAGS" \
+              --arg actor "${{ github.actor }}" \
+              --arg sha "${{ github.sha }}" \
+              --arg workflow "${{ github.workflow }}" \
+              --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              '{
+                text: (
+                  "🐳 *Docker Image Released Successfully* 🚀\n\n" +
+                  "*Repository:* " + $repository + "\n" +
+                  "*Branch:* " + $branch + "\n" +
+                  "*Image:* " + $tags + "\n" +
+                  "*Commit:* " + $sha + "\n" +
+                  "*Triggered by:* " + $actor + "\n\n" +
+                  "🔗 " + $run_url
+                )
+              }')" \
+            "$GOOGLE_CHAT_WEBHOOK_URL"
+
+      - name: Notify Google Chat - Failure
+        if: ${{ failure() }}
+        env:
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+        run: |
+          curl --fail-with-body -X POST \
+            -H "Content-Type: application/json; charset=UTF-8" \
+            -d "$(jq -n \
+              --arg repository "${{ github.repository }}" \
+              --arg branch "${{ github.ref_name }}" \
+              --arg actor "${{ github.actor }}" \
+              --arg workflow "${{ github.workflow }}" \
+              --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              '{
+                text: (
+                  "❌ *Docker Image Release Failed*\n\n" +
+                  "*Repository:* " + $repository + "\n" +
+                  "*Branch:* " + $branch + "\n" +
+                  "*Workflow:* " + $workflow + "\n" +
+                  "*Triggered by:* " + $actor + "\n\n" +
+                  "🔗 Check the workflow:\n" + $run_url
+                )
+              }')" \
+            "$GOOGLE_CHAT_WEBHOOK_URL"  
         
         
       

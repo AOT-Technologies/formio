@@ -29,6 +29,7 @@
       "type": "resource",
       "name": "b",
       "path": "b",
+      "pdfComponents": [],
       "tags": [],
       "submissionAccess": [],
       "access": [],
@@ -41,6 +42,7 @@
       "type": "form",
       "name": "a",
       "path": "a",
+      "pdfComponents": [],
       "tags": [],
       "submissionAccess": [],
       "access": [],
@@ -51,8 +53,13 @@
     "a:save": {
       "title": "Save Submission",
       "name": "save",
-      "handler": ["before"],
-      "method": ["create", "update"],
+      "handler": [
+        "before"
+      ],
+      "method": [
+        "create",
+        "update"
+      ],
       "form": "a",
       "priority": 11,
       "settings": {

@@ -16,7 +16,7 @@ const logger = require('../util/logger')('formio:middleware:deleteRoleHandler');
 module.exports = (router) => {
   const prune = require('../util/delete')(router);
 
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // Only stop delete requests!
     if (req.method !== 'DELETE') {
       return next();
@@ -26,9 +26,7 @@ module.exports = (router) => {
     const params = util.getUrlParams(req.url);
 
     // Get the roleId from the request url.
-    const roleId = params.hasOwnProperty('role')
-      ? params.role
-      : null;
+    const roleId = params.hasOwnProperty('role') ? params.role : null;
 
     if (!roleId) {
       return next();
@@ -39,8 +37,9 @@ module.exports = (router) => {
     }
 
     // Load the role in question.
-    router.formio.resources.role.model.findById(roleId).lean().exec(function(err, role) {
-      if (err || !role) {
+    try {
+      const role = await router.formio.resources.role.model.findById(roleId).lean().exec();
+      if (!role) {
         return res.status(404).send('Unknown Role.');
       }
 
@@ -49,13 +48,16 @@ module.exports = (router) => {
         return res.sendStatus(405);
       }
 
-      prune.role(role._id, req)
-        .then(() => res.sendStatus(200))
-        .catch((err) => {
-          debug(err);
-          logger.error(err);
-          return next(err);
-        });
-    });
+      try {
+        await prune.role(role._id, req);
+        res.sendStatus(200);
+      } catch (err) {
+        debug(err);
+        logger.error(err);
+        return next(err);
+      }
+    } catch (ignoreErr) {
+      return res.status(404).send('Unknown Role.');
+    }
   };
 };

@@ -57,6 +57,9 @@ const transport = new DailyRotateFile({
   maxFiles:"2",
   zippedArchive: true,
  });
+// Many named loggers share this single transport instance; raise the listener
+// ceiling to avoid spurious MaxListenersExceededWarning in tests.
+transport.setMaxListeners(0);
 
  transport.on('archive', async function (file) {
   if (!fs.existsSync(archivedFolder)) {
@@ -67,7 +70,7 @@ const transport = new DailyRotateFile({
   const parsedData = path.parse(file);
   const pathName = parsedData.base;
   fs.promises.rename(path.join(logFolder, pathName), path.join(archivedFolder, pathName))
-  .then(async(res)=>{
+  .then(async()=>{
     fs.readdir(archivedFolder,(err,files)=>{
       if(files.length > 6){
           fs.unlink(path.join(archivedFolder, files[0]),(err)=>{

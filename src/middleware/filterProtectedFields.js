@@ -1,6 +1,7 @@
 'use strict';
 
 const util = require('../util/util');
+const _ = require('lodash');
 
 /**
  * Middleware function to filter protected fields from a submission response.
@@ -9,30 +10,33 @@ const util = require('../util/util');
  *
  * @returns {Function}
  */
-module.exports = function(router) {
-  return function(action, getForm) {
-    return function(req, res, next) {
-      if (!res || !res.resource || !res.resource.item) {
+module.exports = function (router) {
+  return function (action, getForm) {
+    return async function (req, res, next) {
+      if (
+        !_.get(res, 'resource.item') ||
+        router.formio.hook.alter('rawDataAccess', req, next, util.skipHookIfNotExists)
+      ) {
         return next();
       }
 
-      /* If the request is for a bundle and a formId is provided in the query parameters, 
+      /* If the request is for a bundle and a formId is provided in the query parameters,
        use the formId from the query. Otherwise, use the formId obtained from the getForm function. */
 
       const formId = req.isBundle && req.query.formId ? req.query.formId : getForm(req);
 
-      router.formio.cache.loadForm(req, null,formId , function(err, form) {
-        if (err) {
-          return next(err);
+      try {
+        const form = await router.formio.cache.loadForm(req, null, formId);
+
+        if (req.isBundle) {
+          req.bundledForm = form;
         }
 
-        if(req.isBundle){
-          req.bundledForm= form
-        }
-        
-        util.removeProtectedFields(form, action, res.resource.item, req.doNotMinify || req.query.full, req.token);
-        next();
-      });
+        util.removeProtectedFields(form, action, res.resource.item, req.doNotMinify || req.full || req.query.full, req.token);
+        return next();
+      } catch (err) {
+        return next(err);
+      }
     };
   };
 };

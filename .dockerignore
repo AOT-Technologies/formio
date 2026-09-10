@@ -1,1 +1,14 @@
 node_modules
+portal/node_modules
+portal/dist
+.nyc_output
+coverage
+logs
+mongodb
+client
+.env
+.git
+.github
+*.md
+*.zip
+src/vm/bundles

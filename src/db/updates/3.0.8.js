@@ -1,6 +1,6 @@
 'use strict';
 
-module.exports = function(db, config, tools, done) {
+module.exports = function (db, config, tools, done) {
   let roles = db.collection('roles');
   let forms = db.collection('forms');
   let submissions = db.collection('submissions');
@@ -11,13 +11,12 @@ module.exports = function(db, config, tools, done) {
    * @type {Promise}
    */
   let roleCreatedIndex = new Promise((resolve, reject) => {
-    roles.createIndex({created: 1}, {background: true}, (err) => {
-      if (err) {
-        return reject(err);
-      }
-
-      return resolve();
-    });
+    roles
+      .createIndex({ created: 1 }, { background: true })
+      .then(() => {
+        return resolve();
+      })
+      .catch((err) => reject(err));
   });
 
   /**
@@ -26,13 +25,12 @@ module.exports = function(db, config, tools, done) {
    * @type {Promise}
    */
   let roleModifiedIndex = new Promise((resolve, reject) => {
-    roles.createIndex({modified: 1}, {background: true}, (err) => {
-      if (err) {
-        return reject(err);
-      }
-
-      return resolve();
-    });
+    roles
+      .createIndex({ modified: 1 }, { background: true })
+      .then(() => {
+        return resolve();
+      })
+      .catch((err) => reject(err));
   });
 
   /**
@@ -41,13 +39,12 @@ module.exports = function(db, config, tools, done) {
    * @type {Promise}
    */
   let formCreatedIndex = new Promise((resolve, reject) => {
-    forms.createIndex({created: 1}, {background: true}, (err) => {
-      if (err) {
-        return reject(err);
-      }
-
-      return resolve();
-    });
+    forms
+      .createIndex({ created: 1 }, { background: true })
+      .then(() => {
+        return resolve();
+      })
+      .catch((err) => reject(err));
   });
 
   /**
@@ -56,13 +53,12 @@ module.exports = function(db, config, tools, done) {
    * @type {Promise}
    */
   let formModifiedIndex = new Promise((resolve, reject) => {
-    forms.createIndex({modified: 1}, {background: true}, (err) => {
-      if (err) {
-        return reject(err);
-      }
-
-      return resolve();
-    });
+    forms
+      .createIndex({ modified: 1 }, { background: true })
+      .then(() => {
+        return resolve();
+      })
+      .catch((err) => reject(err));
   });
 
   /**
@@ -71,13 +67,12 @@ module.exports = function(db, config, tools, done) {
    * @type {Promise}
    */
   let submissionCreatedIndex = new Promise((resolve, reject) => {
-    submissions.createIndex({created: 1}, {background: true}, (err) => {
-      if (err) {
-        return reject(err);
-      }
-
-      return resolve();
-    });
+    submissions
+      .createIndex({ created: 1 }, { background: true })
+      .then(() => {
+        return resolve();
+      })
+      .catch((err) => reject(err));
   });
 
   /**
@@ -86,25 +81,24 @@ module.exports = function(db, config, tools, done) {
    * @type {Promise}
    */
   let submissionModifiedIndex = new Promise((resolve, reject) => {
-    submissions.createIndex({modified: 1}, {background: true}, (err) => {
-      if (err) {
-        return reject(err);
-      }
-
-      return resolve();
-    });
+    submissions
+      .createIndex({ modified: 1 }, { background: true })
+      .then(() => {
+        return resolve();
+      })
+      .catch((err) => reject(err));
   });
-  
+
   Promise.all([
     roleCreatedIndex,
     roleModifiedIndex,
     formCreatedIndex,
     formModifiedIndex,
     submissionCreatedIndex,
-    submissionModifiedIndex
+    submissionModifiedIndex,
   ])
-  .then(() => {
-    return done();
-  })
-  .catch(done);
+    .then(() => {
+      return done();
+    })
+    .catch(done);
 };

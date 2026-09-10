@@ -1,6 +1,6 @@
 'use strict';
 
-module.exports = (schema) => {
+module.exports = (schema, options = {index: {created: true, modified: true}}) => {
   const created = {
     type: Date,
     index: true,
@@ -14,15 +14,17 @@ module.exports = (schema) => {
     created,
     modified: {
       type: Date,
-      index: true,
+      index: options?.index?.modified === undefined ? true : !!options?.index?.modified,
       description: 'The date this resource was modified.',
       __readonly: true,
     },
   });
 
-  // On pre-save, we will update the modified date.
-  schema.pre('save', function(next) {
-    this.modified = new Date();
+  // On pre-save, we will update the modified date if does not have allowTimestampOverride.
+  schema.pre('save', function (next, options) {
+    const override = options?.allowTimestampOverride;
+    this.modified = override && options.modified ? new Date(options.modified) : new Date();
+    this.created = override && options.created ? new Date(options.created) : this.created;
     next();
   });
 };

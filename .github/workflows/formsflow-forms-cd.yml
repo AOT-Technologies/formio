@@ -4,7 +4,7 @@ on:
   push:
     branches: [formsflow-forms, develop]
   workflow_dispatch:
-  
+
 jobs:
   build:  
    runs-on: ubuntu-latest
@@ -23,7 +23,8 @@ jobs:
         run: |
           VER=$(cat VERSION)
           echo "VERSION=$VER" >> $GITHUB_ENV
-      - name: Set version
+
+      - name: Set version (formsflow-forms branch)
         if: ${{ github.ref == 'refs/heads/formsflow-forms' }}
         working-directory: .
         run: |
@@ -72,9 +73,10 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64/v8
           tags: formsflow/forms-flow-forms:${{ env.VERSION }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
-      - name: Build and push
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push (formsflow-forms branch)
         if: ${{ github.ref == 'refs/heads/formsflow-forms' }}
         id: docker_build_latest
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294

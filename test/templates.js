@@ -79,7 +79,7 @@ module.exports = (app, template, hook) => {
 
           // Prepare the stored roles for comparison.
           let machineName = role.machineName;
-          given[machineName] = _.omit(role, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName']);
+          given[machineName] = _.pick(role, ['title', 'description', 'admin', 'default']);
 
           project.roles[machineName] = project.roles[role._id] = role;
         });
@@ -128,7 +128,7 @@ module.exports = (app, template, hook) => {
           assert.equal(form.hasOwnProperty('machineName'), true);
 
           let machineName = form.machineName;
-          let tempForm = _.omit(form, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName', 'owner', '_vid', 'revisions', 'submissionRevisions']);
+          let tempForm = _.omit(form, ['_id', '__v', 'created', 'deleted', 'modified', 'machineName', 'owner', '_vid', 'revisions', 'submissionRevisions', 'isBundle', 'tenantKey', 'parentFormId']);
 
           tempForm.access = tempForm.access.map(access => {
             access.roles = access.roles.map(role => {
@@ -3659,9 +3659,9 @@ module.exports = (app, template, hook) => {
       });
 
       it('All the forms should be imported', function(done) {
-        assert.deepEqual(_.omit(project.forms.inner, ['_id', 'created', 'modified', '__v', 'owner', 'machineName', 'submissionAccess', 'deleted', 'access', '_vid', 'project', 'revisions', 'submissionRevisions']),
+        assert.deepEqual(_.omit(project.forms.inner, ['_id', 'created', 'modified', '__v', 'owner', 'machineName', 'submissionAccess', 'deleted', 'access', '_vid', 'project', 'revisions', 'submissionRevisions', 'isBundle', 'tenantKey', 'parentFormId']),
         _.omit(testTemplate.forms.inner, ['revisions']));
-        assert.deepEqual(_.omit(project.forms.outer, ['_id', 'created', 'modified', '__v', 'owner', 'machineName', 'submissionAccess', 'deleted', 'access', 'components', '_vid', 'project', 'revisions', 'submissionRevisions']),
+        assert.deepEqual(_.omit(project.forms.outer, ['_id', 'created', 'modified', '__v', 'owner', 'machineName', 'submissionAccess', 'deleted', 'access', 'components', '_vid', 'project', 'revisions', 'submissionRevisions', 'isBundle', 'tenantKey', 'parentFormId']),
         _.omit(testTemplate.forms.outer, ['revisions', 'components']));
         assert.deepEqual(_.omit(project.forms.outer.components[0], ['form']),
         _.omit(testTemplate.forms.outer.components[0], ['form']));

@@ -12,35 +12,32 @@ let async = require('async');
  *
  * Update all submissions to have owners
  */
-module.exports = function(db, config, tools, done) {
+module.exports = function (db, config, tools, done) {
   let submissions = db.collection('submissions');
-  submissions.find({owner: {$eq: null}}).snapshot({$snapshot: true}).toArray(function(err, docs) {
-    if (err) {
-      return done(err);
-    }
-    if (!docs) {
-      return done('No submissions found');
-    }
-
-    // Update each submission to be the owner of itself.
-    async.forEachOf(docs, function(submission, key, next) {
-      submissions.updateOne(
-        {_id: submission._id},
-        {$set: {owner: submission._id}},
-        function(err) {
+  submissions
+    .find({ owner: { $eq: null } })
+    .toArray()
+    .then((docs) => {
+      if (!docs) {
+        return done('No submissions found');
+      }
+      // Update each submission to be the owner of itself.
+      async.forEachOf(
+        docs,
+        function (submission, key, next) {
+          submissions
+            .updateOne({ _id: submission._id }, { $set: { owner: submission._id } })
+            .then(() => next())
+            .catch((err) => next(err));
+        },
+        function (err) {
           if (err) {
-            return next(err);
+            return done(err);
           }
 
-          next();
-        }
+          done();
+        },
       );
-    }, function(err) {
-      if (err) {
-        return done(err);
-      }
-
-      done();
-    });
-  });
+    })
+    .catch((err) => done(err));
 };

@@ -1,12 +1,11 @@
 'use strict';
 
 const _ = require('lodash');
-const async = require('async');
 const util = require('../util/util');
 const Validator = require('../resources/Validator');
 const setDefaultProperties = require('../actions/properties/setDefaultProperties');
 
-module.exports = (router, resourceName, resourceId) => {
+module.exports = (router) => {
   const hook = require('../util/hook')(router.formio);
   const fActions = require('../actions/fields')(router);
   const pActions = require('../actions/properties')(router);
@@ -16,165 +15,169 @@ module.exports = (router, resourceName, resourceId) => {
   [
     {
       name: 'read',
-      method: 'Get'
+      method: 'Get',
     },
     {
       name: 'update',
-      method: 'Put'
+      method: 'Put',
     },
     {
       name: 'update',
-      method: 'Patch'
+      method: 'Patch',
     },
     {
       name: 'create',
-      method: 'Post'
+      method: 'Post',
     },
     {
       name: 'delete',
-      method: 'Delete'
+      method: 'Delete',
     },
     {
       name: 'index',
-      method: 'Index'
-    }
+      method: 'Index',
+    },
   ].forEach((method) => {
     /**
      * Load the current form into the request.
      *
      * @param req
-     * @param done
      */
-    function loadCurrentForm(req, done) {
-      router.formio.cache.loadCurrentForm(req, (err, form) => {
-        if (err) {
-          return done(err);
-        }
-        if (!form) {
-          return done('Form not found.');
-        }
-
-          req.currentForm = hook.alter('currentForm', form, req.body);
-
-        // Load all subforms as well.
-        router.formio.cache.loadSubForms(req.currentForm, req, () => {
-          req.flattenedComponents = util.flattenComponents(form.components, true);
-          return done();
-        });
-      }, true);
+    async function loadCurrentForm(req) {
+      const form = await router.formio.cache.loadCurrentForm(req);
+      if (!form) {
+        throw new Error('Form not found.');
+      }
+      req.currentForm = hook.alter('currentForm', form, req.body);
+      await router.formio.cache.loadSubForms(req.currentForm, req);
     }
 
     /**
      * Initialize the submission object which includes filtering.
      *
      * @param req
-     * @param done
      */
-    function initializeSubmission(req, done) {
-      const isGet = (req.method === 'GET');
-
-      // If this is a get method, then filter the model query.
-      if (isGet) {
-        const submissionQuery = hook.alter('submissionQuery', {form: req.currentForm._id}, req);
-        req.countQuery = req.countQuery || req.model || this.model;
-        req.modelQuery = req.modelQuery || req.model || this.model;
-        req.countQuery = req.countQuery.find(submissionQuery);
-        req.modelQuery = req.modelQuery.find(submissionQuery);
-      }
-
-      // If the request has a body.
-      if (!isGet && req.body) {
-        // By default skip the resource unless they add the save submission action.
-        req.skipResource = true;
-
-        // Only allow the data to go through.
-        const properties = hook.alter('submissionParams', ['data', 'owner', 'access', 'metadata', '_vnote']);
-        req.rolesUpdate = req.body.roles;
-        req.body = _.pick(req.body, properties);
-
-        // Ensure there is always data provided on POST.
-        if (req.method === 'POST' && !req.body.data) {
+    async function initializeSubmission(req) {
+      const ensureDataOnPost = (req) => {
+        if (!req.body.data) {
           req.body.data = {};
         }
+      };
 
-        if (req.method === 'POST') {
-          const allowlist = [
-            "host",
-            "x-forwarded-scheme",
-            "x-forwarded-proto",
-            "x-forwarded-for",
-            "x-real-ip",
-            "connection",
-            "content-length",
-            "pragma",
-            "cache-control",
-            "sec-ch-ua",
-            "accept",
-            "content-type",
-            "sec-ch-ua-mobile",
-            "user-agent",
-            "sec-ch-ua-platform",
-            "origin",
-            "sec-fetch-site",
-            "sec-fetch-mode",
-            "sec-fetch-dest",
-            "referer",
-            "accept-encoding",
-            "accept-language",
-            "sec-gpc",
-            "dnt",
-          ];
-
-          const reqHeaders = _.omitBy(req.headers, (value, key) => {
-            return !allowlist.includes(key) || key.match(/auth/gi);
-          });
-
-          _.set(req.body, 'metadata.headers', reqHeaders);
-        }
-
-        // Ensure that the _fvid is a number.
+      const ensureFvidIsNumber = (req) => {
         if (req.body.hasOwnProperty('_fvid') && !_.isNaN(parseInt(req.body._fvid))) {
           if (req.body._fvid.length === 24) {
             req.body._frid = req.body._fvid;
             delete req.body._fvid;
-          }
-          else {
+          } else {
             req.body._fvid = parseInt(req.body._fvid);
           }
         }
+      };
 
-        // Ensure they cannot reset the submission id.
+      const updateRoles = (req, current) => {
+        if (req.rolesUpdate && req.rolesUpdate.length && current.roles && current.roles.length) {
+          const newRoles = _.intersection(
+            current.roles.map((role) => role.toString()),
+            req.rolesUpdate,
+          );
+          req.body.roles = newRoles.map((roleId) => util.idToBson(roleId));
+        }
+      };
+
+      const setSubmissionId = (req) => {
         if (req.params.submissionId) {
           req.body._id = req.params.submissionId;
           req.subId = req.params.submissionId;
         }
+      };
 
-        // Set the form to the current form.
+      const setRequestHeaders = (req) => {
+        const captureIpAddress = process.env.CAPTURE_IP_ADDRESS && (
+          process.env.CAPTURE_IP_ADDRESS.toLowerCase() === 'true' || 
+          process.env.CAPTURE_IP_ADDRESS === '1'
+        );
+
+        const allowlist = [
+          'host',
+          'x-forwarded-scheme',
+          'x-forwarded-proto',
+          'connection',
+          'content-length',
+          'pragma',
+          'cache-control',
+          'sec-ch-ua',
+          'accept',
+          'content-type',
+          'sec-ch-ua-mobile',
+          'user-agent',
+          'sec-ch-ua-platform',
+          'origin',
+          'sec-fetch-site',
+          'sec-fetch-mode',
+          'sec-fetch-dest',
+          'referer',
+          'accept-encoding',
+          'accept-language',
+          'sec-gpc',
+          'dnt',
+        ];
+
+        if (captureIpAddress) {
+          allowlist.push('x-forwarded-for', 'x-real-ip');
+        }
+
+        const reqHeaders = _.omitBy(req.headers, (value, key) => {
+          return !allowlist.includes(key) || key.match(/auth/gi);
+        });
+
+        _.set(req.body, 'metadata.headers', reqHeaders);
+      };
+
+      const handlePostAndPutRequests = async (req) => {
+        req.skipResource = true;
+        const properties = hook.alter('submissionParams', [
+          'data',
+          'owner',
+          'access',
+          'metadata',
+          '_vnote',
+        ]);
+        req.rolesUpdate = req.body.roles;
+        req.body = _.pick(req.body, properties);
+
+        if (req.method === 'POST') {
+          ensureDataOnPost(req);
+          setRequestHeaders(req);
+        }
+
+        ensureFvidIsNumber(req);
+        setSubmissionId(req);
+
         req.body.form = req.currentForm._id.toString();
-
-        // Allow them to alter the body.
         req.body = hook.alter('submissionRequest', req.body);
 
         if (req.method === 'PUT' && req.params.submissionId) {
-          router.formio.cache.loadCurrentSubmission(req, (err, current) => {
-            if ( req.rolesUpdate && req.rolesUpdate.length && current.roles && current.roles.length) {
-              const newRoles = _.intersection(
-                current.roles.map((role) => role.toString()),
-                req.rolesUpdate
-              );
-                req.body.roles = newRoles.map((roleId) => util.idToBson(roleId));
-            }
+          const current = await router.formio.cache.loadCurrentSubmission(req);
+          updateRoles(req, current);
+          req.currentSubmissionData = current && current.data;
+        }
+      };
 
-            req.currentSubmissionData = current && current.data;
-            done();
-          });
-        }
-        else {
-          done();
-        }
-      }
-      else {
-        done();
+      const handleGetRequest = (req) => {
+        const submissionQuery = hook.alter('submissionQuery', { form: req.currentForm._id }, req);
+        req.countQuery = req.countQuery || req.model || this.model;
+        req.modelQuery = req.modelQuery || req.model || this.model;
+        req.countQuery = req.countQuery.find(submissionQuery);
+        req.modelQuery = req.modelQuery.find(submissionQuery);
+      };
+
+      const isGet = req.method === 'GET';
+
+      if (isGet) {
+        handleGetRequest(req);
+      } else if (req.body) {
+        await handlePostAndPutRequests(req);
       }
     }
 
@@ -183,15 +186,20 @@ module.exports = (router, resourceName, resourceId) => {
      *
      * @param req
      * @param res
-     * @param done
      */
-    function initializeActions(req, res, done) {
+    async function initializeActions(req, res) {
       // If they wish to disable actions, then just skip.
       if (req.query.hasOwnProperty('dryrun') && req.query.dryrun) {
-        return done();
+        return;
       }
-
-      router.formio.actions.initialize(method.name, req, res, done);
+      await new Promise((resolve, reject) => {
+        router.formio.actions.initialize(method.name, req, res, (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        });
+      });
     }
 
     /**
@@ -199,26 +207,38 @@ module.exports = (router, resourceName, resourceId) => {
      *
      * @param req
      * @param form
-     * @param done
      */
-    function validateSubmission(req, res, done) {
+    async function validateSubmission(req, res) {
       req.noValidate = req.noValidate || (req.isAdmin && req.query.noValidate);
 
       // No need to validate on GET requests.
-      if (!(['POST', 'PUT', 'PATCH'].includes(req.method) && req.body)) {
-        return done();
+      if (
+        !(
+          [
+            'POST',
+            'PUT',
+            'PATCH',
+          ].includes(req.method) && req.body
+        )
+      ) {
+        return;
       }
 
       // Assign submission data to the request body.
       const formId = _.get(req, 'body.data.form');
       if (!req.mainForm) {
-        const hasSubforms = Object.values(_.get(req, 'body.data', {})).some(value => _.isObject(value) && value.form);
+        const hasSubforms = Object.values(_.get(req, 'body.data', {})).some(
+          (value) => _.isObject(value) && value.form,
+        );
         req.mainForm = hasSubforms && _.get(req, 'body.form');
       }
       let isSubform = formId && formId.toString() !== req.currentForm._id.toString();
-      isSubform = !isSubform && req.mainForm ? req.mainForm.toString() !== req.currentForm._id.toString() : isSubform;
-      req.submission = req.submission || {data: {}};
-      if (!_.isEmpty(req.submission.data) && !isSubform) {
+      isSubform =
+        !isSubform && req.mainForm
+          ? req.mainForm.toString() !== req.currentForm._id.toString()
+          : isSubform;
+      req.submission = req.submission || { data: {} };
+      if (!_.isEmpty(req.submission.data) && !isSubform && !req.isTransformedData) {
         req.body.data = _.assign(req.body.data, req.submission.data);
       }
 
@@ -226,82 +246,56 @@ module.exports = (router, resourceName, resourceId) => {
       req.submission = _.cloneDeep(req.body);
 
       // Next we need to validate the input.
-      hook.alter('validateSubmissionForm', req.currentForm, req.body, async form => { // eslint-disable-line max-statements
-        // Get the submission model.
-        const submissionModel = req.submissionModel || router.formio.resources.submission.model;
+      await new Promise((resolve, reject) => {
+        hook.alter('validateSubmissionForm', req.currentForm, req.body, req, async () => {
+          // Validate the request.
+          const validator = new Validator(req, router);
+          await validator.validate(req.body, (err, data) => {
+            if (req.noValidate) {
+              return resolve();
+            }
+            if (err) {
+              res.status(400).json(err);
+              return reject(err);
+            }
+            data = hook.alter('rehydrateValidatedSubmissionData', data, req);
 
-        // Next we need to validate the input.
-        const token = util.getRequestValue(req, 'x-jwt-token');
-        // skip sanitize if true then we will skip the submission data snitization
-        let skipSanitize = util.getRequestValue(req, 'skip-sanitize');
-        skipSanitize  = skipSanitize == "true" ? true : false;
-
-        const validator = new Validator(req.currentForm, submissionModel, token, req.token, hook, skipSanitize);
-        validator.validateReCaptcha = (responseToken) => {
-          return new Promise((resolve, reject) => {
-            router.formio.mongoose.models.token.findOne({value: responseToken}, (err, token) => {
-              if (err) {
-                return reject(err);
-              }
-
-              if (!token) {
-                return reject(new Error('ReCaptcha: Response token not found'));
-              }
-
-              // Remove temp token after submission with reCaptcha
-              return token.remove(() => resolve(true));
-            });
+            res.submission = { data: data };
+            resolve();
           });
-        };
-
-        // Validate the request.
-        validator.validate(req.body, (err, data, visibleComponents) => {
-          if (req.noValidate) {
-            return done();
-          }
-          if (err) {
-            return res.status(400).json(err);
-          }
-
-          res.submission = {data: data};
-
-          if (!_.isEqual(visibleComponents, req.currentForm.components)) {
-            req.currentFormComponents = visibleComponents;
-          }
-          else if (req.hasOwnProperty('currentFormComponents') && req.currentFormComponents) {
-            delete req.currentFormComponents;
-          }
-          done();
         });
       });
     }
-
     /**
      * Execute the actions.
      *
      * @param req
      * @param res
-     * @param done
      */
-    function executeActions(handler) {
-      return (req, res, done) => {
-        // If they wish to disable actions, then just skip.
-        if (req.query.hasOwnProperty('dryrun') && req.query.dryrun) {
-          return done();
-        }
+    async function executeActions(handler, req, res) {
+      // If they wish to disable actions, then just skip.
+      if (req.query.hasOwnProperty('dryrun') && req.query.dryrun) {
+        return;
+      }
+      // If the body is undefined, then omit the body.
+      if (
+        handler === 'before' &&
+        req.body &&
+        req.body.hasOwnProperty('data') &&
+        typeof req.body.data === 'undefined'
+      ) {
+        req.body = _.omit(req.body, 'data');
+      }
 
-        // If the body is undefined, then omit the body.
-        if (
-          (handler === 'before') &&
-          (req.body && req.body.hasOwnProperty('data') && typeof req.body.data === 'undefined')
-        ) {
-          req.body = _.omit(req.body, 'data');
-        }
-
-        router.formio.actions.execute(handler, method.name, req, res, done);
-      };
+      await new Promise((resolve, reject) => {
+        router.formio.actions.execute(handler, method.name, req, res, (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        });
+      });
     }
-
     /**
      * Execute the field handlers.
      *
@@ -309,172 +303,164 @@ module.exports = (router, resourceName, resourceId) => {
      *   Whether or not validation is require before running the field actions.
      * @param req
      * @param res
-     * @param done
      */
-    function executeFieldHandlers(validation, req, res, done) {
+    async function executeFieldHandlers(validation, req, res) {
       const promises = [];
       const resourceData = _.get(res, 'resource.item.data', {});
       const submissionData = req.body.data || resourceData;
 
-      util.eachValue((req.currentFormComponents || req.currentForm.components), submissionData, ({
-        component,
-        data,
-        handler,
-        action,
-        path,
-      }) => {
-        if (component) {
-          const componentPath = util.valuePath(path, component.key);
+      util.eachValue(
+        req.currentForm.components,
+        submissionData,
+        ({ component, data, handler, action, path, fullPath }) => {
+          if (component) {
+            const componentPath = util.valuePath(path, component.key);
+            const componentFullPath = util.valuePath(fullPath, component.key);
 
-          // Remove not persistent data
-          if (
-            data &&
-            component.hasOwnProperty('persistent') &&
-            !component.persistent &&
-            !['columns', 'fieldset', 'panel', 'table', 'tabs'].includes(component.type)
-          ) {
-            util.deleteProp(component.key)(data);
-          }
-          else if (req.method === 'PUT') {
-            // Restore value of components with calculated value and disabled server calculation
-            // if they don't present in submission data
-            const newCompData = _.get(submissionData, componentPath, undefined);
-            const currentCompData = _.get(req.currentSubmissionData, componentPath);
+            // Remove not persistent data
+            if (
+              data &&
+              component.hasOwnProperty('persistent') &&
+              (!component.persistent || component.persistent === 'client-only') &&
+              ![
+                'columns',
+                'fieldset',
+                'panel',
+                'table',
+                'tabs',
+              ].includes(component.type)
+            ) {
+              util.deleteProp(component.key)(data);
+            }
 
-            if (component.calculateValue &&
-                !component.calculateServer &&
-                currentCompData &&
-                newCompData === undefined) {
-              _.set(submissionData, componentPath, _.get(req.currentSubmissionData, componentPath));
+            const fieldActions = hook.alter('fieldActions', fActions);
+            const propertyActions = hook.alter('propertyActions', pActions);
+
+            // Execute the property handlers after validation has occurred.
+            const handlerArgs = [
+              component,
+              data,
+              handler,
+              action,
+              {
+                validation,
+                path: componentPath,
+                fullPath: componentFullPath,
+                req,
+                res,
+              },
+            ];
+            // Execute the field handler.
+            if (fieldActions.hasOwnProperty(component.type)) {
+              promises.push(fieldActions[component.type](...handlerArgs));
+            }
+            if (validation) {
+              Object.keys(propertyActions).forEach((property) => {
+                // Set the default value of property if only minified schema of component is loaded
+                if (
+                  !component.hasOwnProperty(property) &&
+                  setDefaultProperties.hasOwnProperty(property)
+                ) {
+                  setDefaultProperties[property](component);
+                }
+                if (component.hasOwnProperty(property) && component[property]) {
+                  promises.push(propertyActions[property](...handlerArgs));
+                }
+              });
             }
           }
+        },
+        {
+          validation,
+          handler: req.handlerName,
+          action: req.method.toLowerCase(),
+          req,
+          res,
+        },
+      );
 
-          const fieldActions = hook.alter('fieldActions', fActions);
-          const propertyActions = hook.alter('propertyActions', pActions);
-
-          // Execute the property handlers after validation has occurred.
-          const handlerArgs = [
-            component,
-            data,
-            handler,
-            action,
-            {
-              validation,
-              path: componentPath,
-              req,
-              res,
-            },
-          ];
-
-          if (validation) {
-            Object.keys(propertyActions).forEach((property) => {
-              // Set the default value of property if only minified schema of component is loaded
-              if (!component.hasOwnProperty(property) && setDefaultProperties.hasOwnProperty(property)) {
-              setDefaultProperties[property](component);
-              }
-              if (component.hasOwnProperty(property) && component[property]) {
-                promises.push(propertyActions[property](...handlerArgs));
-              }
-            });
-          }
-
-          // Execute the field handler.
-          if (fieldActions.hasOwnProperty(component.type)) {
-            promises.push(fieldActions[component.type](...handlerArgs));
-          }
-        }
-      }, {
-        validation,
-        handler: req.handlerName,
-        action: req.method.toLowerCase(),
-        req,
-        res,
-      });
-
-      Promise.all(promises)
-        .then(() => done())
-        .catch(done);
+      await Promise.all(promises);
     }
-
     /**
      * Ensure that a response is always sent.
      *
      * @param req
      * @param res
-     * @param done
      */
-    function ensureResponse(req, res, done) {
+    async function ensureResponse(req, res) {
       if (!res.resource && !res.headersSent) {
         res.status(200).json(res.submission || true);
       }
-      done();
     }
 
-    function alterSubmission(req, res, done) {
-      hook.alter('submission', req, res, () => {
-        if (
-          (req.handlerName === 'afterPost') ||
-          (req.handlerName === 'afterPut')
-        ) {
-          // Perform a post submission update.
-          if (res.resource && res.resource.item && res.resource.item._id) {
-            const submissionUpdate = {};
-            if (!res.resource.item.owner && res.resource.item.roles.length) {
-              res.resource.item.owner = res.resource.item._id;
-              submissionUpdate.owner = res.resource.item._id;
+    async function alterSubmission(req, res) {
+      await new Promise((resolve) => {
+        hook.alter('submission', req, res, async () => {
+          if (req.handlerName === 'afterPost' || req.handlerName === 'afterPut') {
+            // Perform a post submission update.
+            if (res.resource && res.resource.item && res.resource.item._id) {
+              const submissionUpdate = {};
+              if (!res.resource.item.owner && res.resource.item.roles.length) {
+                res.resource.item.owner = res.resource.item._id;
+                submissionUpdate.owner = res.resource.item._id;
+              }
+              hook.alter('postSubmissionUpdate', req, res, submissionUpdate);
+              // If an update exists.
+              if (Object.keys(submissionUpdate).length) {
+                const submissionModel =
+                  req.submissionModel || router.formio.resources.submission.model;
+                await submissionModel.updateOne(
+                  {
+                    _id: res.resource.item._id,
+                  },
+                  { $set: submissionUpdate },
+                );
+                resolve();
+              } else {
+                resolve();
+              }
+            } else {
+              resolve();
             }
-            hook.alter('postSubmissionUpdate', req, res, submissionUpdate);
-
-            // If an update exists.
-            if (Object.keys(submissionUpdate).length) {
-              const submissionModel = req.submissionModel || router.formio.resources.submission.model;
-              submissionModel.updateOne({
-                _id: res.resource.item._id
-              }, {'$set': submissionUpdate}, done);
-            }
-            else {
-              done();
-            }
+          } else {
+            resolve();
           }
-          else {
-            done();
-          }
-        }
-        else {
-          done();
-        }
+        });
       });
     }
-
     // Add before handlers.
     const before = `before${method.method}`;
-    handlers[before] = (req, res, next) => {
+    handlers[before] = async (req, res, next) => {
       req.handlerName = before;
-      async.series([
-        async.apply(loadCurrentForm, req),
-        async.apply(initializeSubmission, req),
-        async.apply(initializeActions, req, res),
-        async.apply(executeFieldHandlers, false, req, res),
-        async.apply(validateSubmission, req, res),
-        async.apply(executeFieldHandlers, true, req, res),
-        async.apply(alterSubmission, req, res),
-        async.apply(executeActions('before'), req, res)
-      ], next);
+      try {
+        await loadCurrentForm(req);
+        await initializeSubmission(req);
+        await initializeActions(req, res);
+        await executeFieldHandlers(false, req, res);
+        await validateSubmission(req, res);
+        await executeFieldHandlers(true, req, res);
+        await alterSubmission(req, res);
+        await executeActions('before', req, res);
+        return next();
+      } catch (error) {
+        if (!res.headersSent) {
+          return next(error);
+        }
+      }
     };
-
     // Add after handlers.
     const after = `after${method.method}`;
-    handlers[after] = (req, res, next) => {
+    handlers[after] = async (req, res, next) => {
       req.handlerName = after;
-      async.series([
-        async.apply(executeActions('after'), req, res),
-        async.apply(executeFieldHandlers, true, req, res),
-        async.apply(alterSubmission, req, res),
-        async.apply(ensureResponse, req, res)
-      ], (...args) => {
-        delete req.currentFormComponents;
-        next(...args);
-      });
+      try {
+        await executeFieldHandlers(true, req, res);
+        await executeActions('after', req, res);
+        await alterSubmission(req, res);
+        await ensureResponse(req, res);
+        return next();
+      } catch (error) {
+        return next(error);
+      }
     };
   });
 

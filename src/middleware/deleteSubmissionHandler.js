@@ -20,7 +20,8 @@ module.exports = (router) => {
     }
 
     if (req.subId) {
-      prune.submission(req.subId, null, req)
+      prune
+        .submission(req.subId, null, req)
         .then((submission = []) => {
           // Skip the resource...
           req.skipResource = true;
@@ -28,7 +29,7 @@ module.exports = (router) => {
             status: 200,
             item: {},
             previousItem: submission[0],
-            deleted: true
+            deleted: true,
           };
           next();
         })
@@ -37,23 +38,23 @@ module.exports = (router) => {
           logger.error(err);
           return next(err);
         });
-    }
-    else if (req.formId) {
+    } else if (req.formId) {
       if (req.headers['x-delete-confirm'] !== req.formId) {
         res.resource = {
           status: 400,
-          item: {error: 'No confirmation header provided'},
-          deleted: false
+          item: { error: 'No confirmation header provided' },
+          deleted: false,
         };
         return next();
       }
 
-      prune.submission(null, req.formId, req)
+      prune
+        .submission(null, req.formId, req)
         .then(() => {
           res.resource = {
             status: 200,
             item: {},
-            deleted: true
+            deleted: true,
           };
           next();
         })

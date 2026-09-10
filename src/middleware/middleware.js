@@ -1,6 +1,6 @@
 'use strict';
 
-module.exports = function(router) {
+module.exports = function (router) {
   return {
     alias: require('./alias')(router),
     alterCurrentSubmissionWithPrevious: require('./alterCurrentSubmissionWithPrevious')(router),
@@ -39,13 +39,14 @@ module.exports = function(router) {
     tokenHandler: require('./tokenHandler')(router),
     restrictRequestTypes: require('./restrictRequestTypes')(router),
     filterIndex: require('./filterIndex')(router),
-    mongodbConnectionState: require('./mongodbConnectionState')(router), 
-    tokenVerify:require("./tokenVerify")(router),
+    allowTimestampOverride: require('./allowTimestampOverride')(router),
+    mongodbConnectionState: require('./mongodbConnectionState')(router),
+    tokenVerify: require('./tokenVerify')(router),
     formRevisionLoader: require('./formRevisionLoader')(router),
     submissionRevisionLoader: require('./submissionRevisionLoader')(router),
     filterBundleSubmissionData: require('./filterBundleSubmissionData')(router),
-    checkCurrentFormIsBundle:  require('./checkCurrentFormIsBundle')(router),
+    checkCurrentFormIsBundle: require('./checkCurrentFormIsBundle')(router),
     handleFormsList: require('./handleFormsList')(router),
-
+    lastModifiedIndexHandler: require('./lastModifiedIndexHandler')(router),
   };
 };

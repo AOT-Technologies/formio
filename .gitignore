@@ -5,8 +5,14 @@
 bower_components
 node_modules
 app*
-client
+!App.tsx
 npm-debug.log
+client
 .env
 mongodb
 logs
+portal/node_modules
+portal/dist
+coverage
+.nyc_output
+src/vm/bundles

@@ -5,19 +5,19 @@
 
 **What changed?**
 
-*Previously, formio ... This PR replaces this behavior by ...*
+_Previously, formio ... This PR replaces this behavior by ..._
 
 **Why have you chosen this solution?**
 
-*Although there were many potential solutions such as ..., [my solution] was best because ...*
+_Although there were many potential solutions such as ..., [my solution] was best because ..._
 
 ## Dependencies
 
-*This PR depends on the following PRs from other Form.io modules: ...*
+_This PR depends on the following PRs from other Form.io modules: ..._
 
 ## How has this PR been tested?
 
-*I added automated tests to cover [all/the following] cases, including ...*
+_I added automated tests to cover [all/the following] cases, including ..._
 
 ## Checklist:
 

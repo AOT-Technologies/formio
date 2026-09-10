@@ -89,7 +89,7 @@ jobs:
       - name: Notify Google Chat - Success
         if: ${{ success() }}
         env:
-          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.DOCKER_HUB_DEPLOY_GOOGLE_CHAT_WEBHOOK_URL }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           curl --fail-with-body -X POST \
@@ -118,7 +118,7 @@ jobs:
       - name: Notify Google Chat - Failure
         if: ${{ failure() }}
         env:
-          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.DOCKER_HUB_DEPLOY_GOOGLE_CHAT_WEBHOOK_URL }}
         run: |
           curl --fail-with-body -X POST \
             -H "Content-Type: application/json; charset=UTF-8" \

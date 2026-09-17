@@ -50,7 +50,9 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64/v8
-          tags: formsflow/forms-flow-forms:${{ env.VERSION }}
+          tags: |
+            formsflow/forms-flow-forms:${{ env.VERSION }}
+            formsflow/forms-flow-forms-ee:${{ env.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -63,6 +65,10 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64/v8
-          tags: formsflow/forms-flow-forms:${{ env.VERSION }}, formsflow/forms-flow-forms:latest
+          tags: |
+            formsflow/forms-flow-forms:${{ env.VERSION }}
+            formsflow/forms-flow-forms:latest
+            formsflow/forms-flow-forms-ee:${{ env.VERSION }}
+            formsflow/forms-flow-forms-ee:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

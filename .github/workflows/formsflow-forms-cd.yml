@@ -35,7 +35,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@2af9c6a52b5431eea749f0e923b7503b84813f77
         with:
-          images: formsflow/forms-flow-forms
+          images: |
+            formsflow/forms-flow-forms
+            formsflow/forms-flow-forms-ee
           tags: ${{ env.VERSION }}
       - run: echo ${{ env.VERSION }}
       
@@ -72,7 +74,9 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64/v8
-          tags: formsflow/forms-flow-forms:${{ env.VERSION }}
+          tags: |
+            formsflow/forms-flow-forms:${{ env.VERSION }}
+            formsflow/forms-flow-forms-ee:${{ env.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -85,7 +89,11 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64/v8
-          tags: formsflow/forms-flow-forms:${{ env.VERSION }}, formsflow/forms-flow-forms:latest
+          tags: |
+            formsflow/forms-flow-forms:${{ env.VERSION }}
+            formsflow/forms-flow-forms:latest
+            formsflow/forms-flow-forms-ee:${{ env.VERSION }}
+            formsflow/forms-flow-forms-ee:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
       - name: Notify Google Chat - Success

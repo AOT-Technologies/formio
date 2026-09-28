@@ -9,7 +9,7 @@ const _ = require("lodash");
  *
  * @returns {Function}
  */
-module.exports = function (router) {
+module.exports = function (_router) {
   return function (req, res, next) {
     if (
       !res?.resource?.item ||

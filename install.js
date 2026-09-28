@@ -3,7 +3,6 @@
 const inquirer = require('inquirer').default;
 const async = require('async');
 const fs = require('fs-extra');
-const _ = require('lodash');
 const nunjucks = require('nunjucks');
 nunjucks.configure([], { watch: false });
 const util = require('./src/util/util');
@@ -22,8 +21,6 @@ module.exports = function (formio, items, done) {
     app: path.join(__dirname, 'app')
   };
 
-  // The application they wish to install.
-  let application = '';
   let templateFile = '';
 
   /**

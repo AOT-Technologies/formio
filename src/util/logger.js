@@ -70,7 +70,7 @@ transport.setMaxListeners(0);
   const parsedData = path.parse(file);
   const pathName = parsedData.base;
   fs.promises.rename(path.join(logFolder, pathName), path.join(archivedFolder, pathName))
-  .then(async(res)=>{
+  .then(async()=>{
     fs.readdir(archivedFolder,(err,files)=>{
       if(files.length > 6){
           fs.unlink(path.join(archivedFolder, files[0]),(err)=>{

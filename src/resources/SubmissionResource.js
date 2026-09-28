@@ -3,7 +3,6 @@
 const ResourceFactory = require('resourcejs');
 const Resource = ResourceFactory.Resource;
 const _ = require('lodash');
-const utils = require("../util/util");
 
 module.exports = (router) => {
   const hook = require('../util/hook')(router.formio);

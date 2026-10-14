@@ -745,7 +745,7 @@ jobs:
 
     with:
       notification_type: workflow
-      status: ${{ needs.build-and-push-image-to-dockerhub.result }}
+      status: ${{ needs.workflow-status.outputs.status }}
       component: "forms-flow-forms"
       image: ${{ needs.build-and-push-image-to-dockerhub.outputs.image }}
       branch: ${{ github.ref_name }}

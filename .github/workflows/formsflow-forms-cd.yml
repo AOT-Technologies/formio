@@ -1,58 +1,113 @@
-name: formsflow-forms to Docker Hub
+name: CD - formsflow-forms
 
 on:
-  push:
-    branches: [formsflow-forms, develop]
   workflow_dispatch:
+  push:
+    branches: [ formsflow-forms, develop ]
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  build:  
-   runs-on: ubuntu-latest
-   permissions:
-    contents: read
-    id-token: write  
-   
-   steps:
 
-      - name: Check Out Repo 
-        uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2
-        
+  # ============================================================
+  # 1. BUILD AND PUSH DOCKER IMAGE
+  # ============================================================
+  build-and-push-image-to-dockerhub:
+    if: github.repository == 'AOT-Technologies/formio'
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - image: formsflow/forms-flow-forms
+            context: .
+            dockerfile: Dockerfile
+            name: formsflow-forms
+
+    outputs:
+      image: ${{ steps.image-output.outputs.image }}
+      digest: ${{ steps.image-output.outputs.digest }}
+
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # ----------------------------------------------------------
+      # Cosign
+      # ----------------------------------------------------------
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+
+      # ----------------------------------------------------------
+      # Docker Buildx
+      # ----------------------------------------------------------
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+        with:
+          install: true
+
+      # ----------------------------------------------------------
+      # Version
+      # ----------------------------------------------------------
       - name: Set version
         if: ${{ github.ref != 'refs/heads/formsflow-forms' }}
         working-directory: .
         run: |
           VER=$(cat VERSION)
-          echo "VERSION=$VER" >> $GITHUB_ENV
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
 
-      - name: Set version (formsflow-forms branch)
+      - name: Set version
         if: ${{ github.ref == 'refs/heads/formsflow-forms' }}
         working-directory: .
         run: |
           VER=$(cat VERSION)
           VER=${VER/-alpha/''}
-          echo "VERSION=$VER" >> $GITHUB_ENV
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+
+      - name: Show version
+        run: echo "VERSION=${{ env.VERSION }}"
+
+      # ----------------------------------------------------------
+      # Docker metadata
+      # ----------------------------------------------------------
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@2af9c6a52b5431eea749f0e923b7503b84813f77
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: |
             formsflow/forms-flow-forms
             formsflow/forms-flow-forms-ee
-          tags: ${{ env.VERSION }}
-      - run: echo ${{ env.VERSION }}
-      
+          tags: |
+            type=raw,value=${{ env.VERSION }}
+
+      # ----------------------------------------------------------
+      # Docker Hub OIDC
+      # ----------------------------------------------------------
       - name: Get Docker token
         id: docker_oidc
         uses: docker/oidc-action@2500c95e182cadc20f0ead5f96113ee82c736e88
         with:
           connection-id: ${{ secrets.DOCKER_OIDC_CONNECTION_ID }}
-          expires-in: 3600
+          expires-in: 1800
+
       - name: Docker login
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
-         username: ${{ secrets.DOCKER_HUB_ORG_USERNAME }}
-         password: ${{ steps.docker_oidc.outputs.token }}
-          
+          username: ${{ secrets.DOCKER_HUB_ORG_USERNAME }}
+          password: ${{ steps.docker_oidc.outputs.token }}
+
+      # ----------------------------------------------------------
+      # Docker layer cache
+      # ----------------------------------------------------------
       - name: Cache Docker layers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -60,33 +115,47 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ matrix.name }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-${{ matrix.name }}
-            
+
+      # ----------------------------------------------------------
+      # Multi-architecture support
+      # ----------------------------------------------------------
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a
+        with:
+          platforms: all
+
       - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
-      
-      - name: Build and push
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+        with:
+          driver: docker-container
+
+      # ----------------------------------------------------------
+      # Build and push - non-formsflow-forms
+      # ----------------------------------------------------------
+      - name: Build and push Docker image (Non-formsflow-forms branch)
+        id: docker-push-nonmain
         if: ${{ github.ref != 'refs/heads/formsflow-forms' }}
-        id: docker_build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
-          context: ./
-          file: ./Dockerfile
+          context: .
+          file: Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64/v8
           tags: |
             formsflow/forms-flow-forms:${{ env.VERSION }}
             formsflow/forms-flow-forms-ee:${{ env.VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Build and push (formsflow-forms branch)
+      # ----------------------------------------------------------
+      # Build and push - formsflow-forms
+      # ----------------------------------------------------------
+      - name: Build and push Docker image (formsflow-forms branch)
+        id: docker-push-main
         if: ${{ github.ref == 'refs/heads/formsflow-forms' }}
-        id: docker_build_latest
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
-          context: ./
-          file: ./Dockerfile
+          context: .
+          file: Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64/v8
           tags: |
@@ -94,62 +163,598 @@ jobs:
             formsflow/forms-flow-forms:latest
             formsflow/forms-flow-forms-ee:${{ env.VERSION }}
             formsflow/forms-flow-forms-ee:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
-      - name: Notify Google Chat - Success
-        if: ${{ success() }}
-        env:
-          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.DOCKER_HUB_DEPLOY_GOOGLE_CHAT_WEBHOOK_URL }}
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          curl --fail-with-body -X POST \
-            -H "Content-Type: application/json; charset=UTF-8" \
-            -d "$(jq -n \
-              --arg repository "${{ github.repository }}" \
-              --arg branch "${{ github.ref_name }}" \
-              --arg tags "$IMAGE_TAGS" \
-              --arg actor "${{ github.actor }}" \
-              --arg sha "${{ github.sha }}" \
-              --arg workflow "${{ github.workflow }}" \
-              --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              '{
-                text: (
-                  "🐳 *Docker Image Released Successfully* 🚀\n\n" +
-                  "*Repository:* " + $repository + "\n" +
-                  "*Branch:* " + $branch + "\n" +
-                  "*Image:* " + $tags + "\n" +
-                  "*Commit:* " + $sha + "\n" +
-                  "*Triggered by:* " + $actor + "\n\n" +
-                  "🔗 " + $run_url
-                )
-              }')" \
-            "$GOOGLE_CHAT_WEBHOOK_URL"
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Notify Google Chat - Failure
-        if: ${{ failure() }}
+      # ----------------------------------------------------------
+      # Sign image by immutable digest
+      # ----------------------------------------------------------
+      - name: Sign published Docker image
         env:
-          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.DOCKER_HUB_DEPLOY_GOOGLE_CHAT_WEBHOOK_URL }}
+          DIGEST: ${{ github.ref == 'refs/heads/formsflow-forms' && steps.docker-push-main.outputs.digest || steps.docker-push-nonmain.outputs.digest }}
         run: |
-          curl --fail-with-body -X POST \
-            -H "Content-Type: application/json; charset=UTF-8" \
-            -d "$(jq -n \
-              --arg repository "${{ github.repository }}" \
-              --arg branch "${{ github.ref_name }}" \
-              --arg actor "${{ github.actor }}" \
-              --arg workflow "${{ github.workflow }}" \
-              --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              '{
-                text: (
-                  "❌ *Docker Image Release Failed*\n\n" +
-                  "*Repository:* " + $repository + "\n" +
-                  "*Branch:* " + $branch + "\n" +
-                  "*Workflow:* " + $workflow + "\n" +
-                  "*Triggered by:* " + $actor + "\n\n" +
-                  "🔗 Check the workflow:\n" + $run_url
-                )
-              }')" \
-            "$GOOGLE_CHAT_WEBHOOK_URL"  
-        
-        
-      
-  
+          set -euo pipefail
+
+          echo "Signing:"
+          echo "formsflow/forms-flow-forms@${DIGEST}"
+          cosign sign --yes "formsflow/forms-flow-forms@${DIGEST}"
+
+          echo "Signing:"
+          echo "formsflow/forms-flow-forms-ee@${DIGEST}"
+          cosign sign --yes "formsflow/forms-flow-forms-ee@${DIGEST}"
+
+      # ----------------------------------------------------------
+      # Image output
+      # ----------------------------------------------------------
+      - name: Set image output
+        id: image-output
+        if: ${{ steps.docker-push-nonmain.outcome == 'success' || steps.docker-push-main.outcome == 'success' }}
+        run: |
+          IMAGE="${{ matrix.image }}:${{ env.VERSION }}"
+          DIGEST="${{ github.ref == 'refs/heads/formsflow-forms' && steps.docker-push-main.outputs.digest || steps.docker-push-nonmain.outputs.digest }}"
+
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+          echo "Docker image:"
+          echo "$IMAGE"
+
+          echo "Docker digest:"
+          echo "$DIGEST"
+
+  # ============================================================
+  # 2. DOCKER PUSH NOTIFICATION
+  # ============================================================
+  docker-notification:
+    name: Docker Push Notification
+
+    needs:
+      - build-and-push-image-to-dockerhub
+
+    if: ${{ always() && (github.repository == 'AOT-Technologies/formio') }}
+
+    uses: ./.github/workflows/docker-image-release-notify.yml
+
+    with:
+      notification_type: docker
+      status: ${{ needs.build-and-push-image-to-dockerhub.result }}
+      component: "formsflow-forms"
+      image: ${{ needs.build-and-push-image-to-dockerhub.outputs.image }}
+      branch: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+      actor: ${{ github.actor }}
+      workflow: ${{ github.workflow }}
+      run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    secrets: inherit
+
+  # ============================================================
+  # 3. DEPLOY TO DEV EKS
+  # ============================================================
+  deploy-to-dev-eks:
+    name: Deploy Forms Flow Forms to DEV EKS
+
+    needs:
+      - build-and-push-image-to-dockerhub
+
+    if: ${{ needs.build-and-push-image-to-dockerhub.result == 'success' }}
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ secrets.REGION }}
+      CE_IMAGE: formsflow/forms-flow-forms@${{ needs.build-and-push-image-to-dockerhub.outputs.digest }}
+      EE_IMAGE: formsflow/forms-flow-forms-ee@${{ needs.build-and-push-image-to-dockerhub.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # ----------------------------------------------------------
+      # Docker Hub OIDC
+      # ----------------------------------------------------------
+      - name: Get Docker token
+        id: docker_oidc
+        uses: docker/oidc-action@2500c95e182cadc20f0ead5f96113ee82c736e88
+        with:
+          connection-id: ${{ secrets.DOCKER_OIDC_CONNECTION_ID }}
+          expires-in: 1800
+
+      - name: Docker login
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          username: ${{ secrets.DOCKER_HUB_ORG_USERNAME }}
+          password: ${{ steps.docker_oidc.outputs.token }}
+
+      # ----------------------------------------------------------
+      # Cosign
+      # ----------------------------------------------------------
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+
+      # ----------------------------------------------------------
+      # Verify signed Docker CE image
+      # ----------------------------------------------------------
+      - name: Verify signed Docker CE image
+        run: |
+          set -euo pipefail
+          echo "Verifying image signature for: $CE_IMAGE"
+          if cosign verify \
+            "$CE_IMAGE" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/formsflow-forms-cd.yml@${{ github.ref }}"; then
+            echo "Image signature successfully verified for: $CE_IMAGE"
+          else
+            echo "ERROR: Image signature verification failed for $CE_IMAGE! Aborting deployment." >&2
+            exit 1
+          fi
+
+      # ----------------------------------------------------------
+      # Verify signed Docker EE image
+      # ----------------------------------------------------------
+      - name: Verify signed Docker EE image
+        run: |
+          set -euo pipefail
+          echo "Verifying image signature for: $EE_IMAGE"
+          if cosign verify \
+            "$EE_IMAGE" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/formsflow-forms-cd.yml@${{ github.ref }}"; then
+            echo "Image signature successfully verified for: $EE_IMAGE"
+          else
+            echo "ERROR: Image signature verification failed for $EE_IMAGE! Aborting deployment." >&2
+            exit 1
+          fi
+      # ----------------------------------------------------------
+      # AWS GitHub OIDC
+      # ----------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_ROLE_ARN }}
+          aws-region: ${{ secrets.REGION }}
+
+      # ----------------------------------------------------------
+      # Configure kubeconfig
+      # ----------------------------------------------------------
+      - name: Configure kubectl
+        shell: bash
+        env:
+          DEV_EKS_CLUSTER: ${{ secrets.DEV_EKS_CLUSTER }}
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$DEV_EKS_CLUSTER"
+
+      - name: Verify Kubernetes access
+        shell: bash
+        run: |
+          kubectl cluster-info
+
+      # ----------------------------------------------------------
+      # Show image
+      # ----------------------------------------------------------
+      - name: Show deployment image
+        run: |
+          echo "Deploying:"
+          echo "$EE_IMAGE"
+          echo "$CE_IMAGE"
+
+      # ========================================================
+      # DEV EE MULTITENANT NAMESPACE
+      # ========================================================
+      - name: Deploy to DEV EE Multitenant namespace
+        shell: bash
+        env:
+          NAMESPACE: ${{ secrets.DEV_EE_MULTITENANT_NAMESPACE }}
+        run: |
+          echo "Deploying image:"
+          echo "$EE_IMAGE"
+
+          kubectl -n "$NAMESPACE" \
+            patch deployment forms-flow-forms \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"forms-flow-forms","image":"'"$EE_IMAGE"'"}]}}}}'
+
+          kubectl -n "$NAMESPACE" \
+            rollout restart deployment forms-flow-forms
+
+          kubectl -n "$NAMESPACE" \
+            rollout status deployment forms-flow-forms \
+            --timeout=5m
+      # ========================================================
+      # DEV EE NAMESPACE
+      # ========================================================
+      - name: Deploy to DEV EE namespace
+        shell: bash
+        env:
+          NAMESPACE: ${{ secrets.DEV_EE_NAMESPACE }}
+        run: |
+          echo "Deploying image:"
+          echo "$EE_IMAGE"
+
+          kubectl -n "$NAMESPACE" \
+            patch deployment forms-flow-forms \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"forms-flow-forms","image":"'"$EE_IMAGE"'"}]}}}}'
+
+          kubectl -n "$NAMESPACE" \
+            rollout restart deployment forms-flow-forms
+
+          kubectl -n "$NAMESPACE" \
+            rollout status deployment forms-flow-forms \
+            --timeout=5m
+      # ========================================================
+      # DEV OPEN SOURCE NAMESPACE
+      # ========================================================
+      - name: Deploy to DEV Open Source namespace
+        shell: bash
+        env:
+          NAMESPACE: ${{ secrets.DEV_OPENSOURCE_NAMESPACE }}
+        run: |
+          echo "Deploying image:"
+          echo "$CE_IMAGE"
+
+          kubectl -n "$NAMESPACE" \
+            patch deployment forms-flow-forms \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"forms-flow-forms","image":"'"$CE_IMAGE"'"}]}}}}'
+
+          kubectl -n "$NAMESPACE" \
+            rollout restart deployment forms-flow-forms
+
+          kubectl -n "$NAMESPACE" \
+            rollout status deployment forms-flow-forms \
+            --timeout=5m
+
+
+      # ----------------------------------------------------------
+      # Verify deployments
+      # ----------------------------------------------------------
+      - name: Verify deployments
+        shell: bash
+        env:
+          DEV_EE_MULTITENANT_NAMESPACE: ${{ secrets.DEV_EE_MULTITENANT_NAMESPACE }}
+          DEV_EE_NAMESPACE: ${{ secrets.DEV_EE_NAMESPACE }}
+          DEV_OPENSOURCE_NAMESPACE: ${{ secrets.DEV_OPENSOURCE_NAMESPACE }}
+        run: |
+          echo "DEV EE Multitenant:"
+          kubectl -n "$DEV_EE_MULTITENANT_NAMESPACE" \
+            get deployment forms-flow-forms
+          echo "DEV EE:"
+          kubectl -n "$DEV_EE_NAMESPACE" \
+            get deployment forms-flow-forms
+          echo "DEV Open Source:"
+          kubectl -n "$DEV_OPENSOURCE_NAMESPACE" \
+            get deployment forms-flow-forms
+
+  # ============================================================
+  # 4. DEPLOY TO QA EKS
+  # ============================================================
+  deploy-to-qa-eks:
+    name: Deploy Forms Flow Forms to QA EKS
+
+    needs:
+      - build-and-push-image-to-dockerhub
+
+    if: ${{ needs.build-and-push-image-to-dockerhub.result == 'success' }}
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ secrets.REGION }}
+      EE_IMAGE: formsflow/forms-flow-forms-ee@${{ needs.build-and-push-image-to-dockerhub.outputs.digest }}
+      CE_IMAGE: formsflow/forms-flow-forms@${{ needs.build-and-push-image-to-dockerhub.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # ----------------------------------------------------------
+      # Docker Hub OIDC
+      # ----------------------------------------------------------
+      - name: Get Docker token
+        id: docker_oidc
+        uses: docker/oidc-action@2500c95e182cadc20f0ead5f96113ee82c736e88
+        with:
+          connection-id: ${{ secrets.DOCKER_OIDC_CONNECTION_ID }}
+          expires-in: 1800
+
+      - name: Docker login
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          username: ${{ secrets.DOCKER_HUB_ORG_USERNAME }}
+          password: ${{ steps.docker_oidc.outputs.token }}
+
+      # ----------------------------------------------------------
+      # Cosign
+      # ----------------------------------------------------------
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+
+      # ----------------------------------------------------------
+      # Verify signed Docker EE image
+      # ----------------------------------------------------------
+      - name: Verify signed Docker EE image
+        run: |
+          set -euo pipefail
+          echo "Verifying image signature for: $EE_IMAGE"
+          if cosign verify \
+            "$EE_IMAGE" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/formsflow-forms-cd.yml@${{ github.ref }}"; then
+            echo "Image signature successfully verified for: $EE_IMAGE"
+          else
+            echo "ERROR: Image signature verification failed for $EE_IMAGE! Aborting deployment." >&2
+            exit 1
+          fi
+
+      # ----------------------------------------------------------
+      # Verify signed Docker CE image
+      # ----------------------------------------------------------
+      - name: Verify signed Docker CE image
+        run: |
+          set -euo pipefail
+          echo "Verifying image signature for: $CE_IMAGE"
+          if cosign verify \
+            "$CE_IMAGE" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/formsflow-forms-cd.yml@${{ github.ref }}"; then
+            echo "Image signature successfully verified for: $CE_IMAGE"
+          else
+            echo "ERROR: Image signature verification failed for $CE_IMAGE! Aborting deployment." >&2
+            exit 1
+          fi  
+
+      # ----------------------------------------------------------
+      # AWS GitHub OIDC
+      # ----------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_ROLE_ARN }}
+          aws-region: ${{ secrets.REGION }}
+
+      # ----------------------------------------------------------
+      # Configure kubeconfig
+      # ----------------------------------------------------------
+      - name: Configure kubectl
+        shell: bash
+        env:
+          QA_EKS_CLUSTER: ${{ secrets.QA_EKS_CLUSTER }}
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$QA_EKS_CLUSTER"
+
+      - name: Verify Kubernetes access
+        shell: bash
+        run: |
+          kubectl cluster-info
+
+      # ----------------------------------------------------------
+      # Show image
+      # ----------------------------------------------------------
+      - name: Show deployment image
+        run: |
+          echo "Deploying:"
+          echo "$EE_IMAGE"
+          echo "$CE_IMAGE"
+
+      # ========================================================
+      # QA MULTITENANT NAMESPACE
+      # ========================================================
+      - name: Deploy to QA Multitenant namespace
+        shell: bash
+        env:
+          NAMESPACE: ${{ secrets.QA_EE_MULTITENANT_NAMESPACE }}
+        run: |
+          echo "Deploying image:"
+          echo "$EE_IMAGE"
+
+          kubectl -n "$NAMESPACE" \
+            patch deployment forms-flow-forms \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"forms-flow-forms","image":"'"$EE_IMAGE"'"}]}}}}'
+
+          kubectl -n "$NAMESPACE" \
+            rollout restart deployment forms-flow-forms
+
+          kubectl -n "$NAMESPACE" \
+            rollout status deployment forms-flow-forms \
+            --timeout=5m
+      # ----------------------------------------------------------
+      # QA EE Namespace
+      # ----------------------------------------------------------
+      - name: Deploy to QA EE namespace
+        shell: bash
+        env:
+          NAMESPACE: ${{ secrets.QA_EE_NAMESPACE }}
+        run: |
+          echo "Deploying image:"
+          echo "$EE_IMAGE"
+
+          kubectl -n "$NAMESPACE" \
+            patch deployment forms-flow-forms \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"forms-flow-forms","image":"'"$EE_IMAGE"'"}]}}}}'
+
+          kubectl -n "$NAMESPACE" \
+            rollout restart deployment forms-flow-forms
+
+          kubectl -n "$NAMESPACE" \
+            rollout status deployment forms-flow-forms \
+            --timeout=5m
+
+      # ----------------------------------------------------------
+      # QA Open Source Namespace
+      # ----------------------------------------------------------
+      - name: Deploy to QA Open Source namespace
+        shell: bash
+        env:
+          NAMESPACE: ${{ secrets.QA_OPENSOURCE_NAMESPACE }}
+        run: |
+          echo "Deploying image:"
+          echo "$CE_IMAGE"
+
+          kubectl -n "$NAMESPACE" \
+            patch deployment forms-flow-forms \
+            -p '{"spec":{"template":{"spec":{"containers":[{"name":"forms-flow-forms","image":"'"$CE_IMAGE"'"}]}}}}'
+
+          kubectl -n "$NAMESPACE" \
+            rollout restart deployment forms-flow-forms
+
+          kubectl -n "$NAMESPACE" \
+            rollout status deployment forms-flow-forms \
+            --timeout=5m
+
+      # ----------------------------------------------------------
+      # Verify deployments
+      # ----------------------------------------------------------
+      - name: Verify deployments
+        shell: bash
+        env:
+          QA_EE_MULTITENANT_NAMESPACE: ${{ secrets.QA_EE_MULTITENANT_NAMESPACE }}
+          QA_OPENSOURCE_NAMESPACE: ${{ secrets.QA_OPENSOURCE_NAMESPACE }}
+          QA_EE_NAMESPACE: ${{ secrets.QA_EE_NAMESPACE }}
+        run: |
+          echo "QA Multitenant:"
+          kubectl -n "$QA_EE_MULTITENANT_NAMESPACE" \
+            get deployment forms-flow-forms
+          echo "QA Open Source:"
+          kubectl -n "$QA_OPENSOURCE_NAMESPACE" \
+            get deployment forms-flow-forms
+          echo "QA EE:"
+          kubectl -n "$QA_EE_NAMESPACE" \
+            get deployment forms-flow-forms
+
+  # ============================================================
+  # 5. KUBERNETES DEV DEPLOYMENT NOTIFICATION
+  # ============================================================
+  kubernetes-notification-dev:
+    name: Kubernetes DEV Deployment Notification
+
+    needs:
+      - build-and-push-image-to-dockerhub
+      - deploy-to-dev-eks
+
+    if: ${{ always() && (github.repository == 'AOT-Technologies/formio' || github.repository == 'amal-k-soman-aot/formio') }}
+
+    uses: ./.github/workflows/docker-image-release-notify.yml
+
+    with:
+      notification_type: kubernetes
+      status: ${{ needs.deploy-to-dev-eks.result }}
+      component: "formsflow-forms"
+      image: ${{ needs.build-and-push-image-to-dockerhub.outputs.image }}
+      branch: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+      actor: ${{ github.actor }}
+      workflow: ${{ github.workflow }}
+      run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      environment: "DEV"
+      namespace: "DEV EE Multitenant"
+      deployment: "forms-flow-forms"
+
+    secrets: inherit
+
+  # ============================================================
+  # 6. KUBERNETES QA DEPLOYMENT NOTIFICATION
+  # ============================================================
+  kubernetes-notification-qa:
+    name: Kubernetes QA Deployment Notification
+
+    needs:
+      - build-and-push-image-to-dockerhub
+      - deploy-to-qa-eks
+
+    if: ${{ always() && (github.repository == 'AOT-Technologies/formio' || github.repository == 'amal-k-soman-aot/formio') }}
+
+    uses: ./.github/workflows/docker-image-release-notify.yml
+
+    with:
+      notification_type: kubernetes
+      status: ${{ needs.deploy-to-qa-eks.result }}
+      component: "formsflow-forms"
+      image: ${{ needs.build-and-push-image-to-dockerhub.outputs.image }}
+      branch: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+      actor: ${{ github.actor }}
+      workflow: ${{ github.workflow }}
+      run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      environment: "QA"
+      namespace: "QA EE Multitenant"
+      deployment: "forms-flow-forms"
+
+    secrets: inherit
+
+  # ============================================================
+  # 7. CALCULATE OVERALL WORKFLOW STATUS
+  # ============================================================
+  workflow-status:
+    name: Calculate Overall Workflow Status
+
+    needs:
+      - build-and-push-image-to-dockerhub
+      - deploy-to-dev-eks
+      - deploy-to-qa-eks
+
+    if: ${{ always() && (github.repository == 'AOT-Technologies/formio') }}
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      status: ${{ steps.status.outputs.status }}
+
+    steps:
+      - name: Calculate status
+        id: status
+        shell: bash
+        run: |
+          BUILD_RESULT="${{ needs.build-and-push-image-to-dockerhub.result }}"
+          DEV_RESULT="${{ needs.deploy-to-dev-eks.result }}"
+          QA_RESULT="${{ needs.deploy-to-qa-eks.result }}"
+
+          echo "Build result: $BUILD_RESULT"
+          echo "DEV Deploy result: $DEV_RESULT"
+          echo "QA Deploy result: $QA_RESULT"
+
+          if [ "$BUILD_RESULT" = "success" ] && [ "$DEV_RESULT" = "success" ] && [ "$QA_RESULT" = "success" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ============================================================
+  # 8. OVERALL WORKFLOW NOTIFICATION
+  # ============================================================
+  workflow-notification:
+    name: Overall Workflow Notification
+
+    needs:
+      - build-and-push-image-to-dockerhub
+      - deploy-to-dev-eks
+      - deploy-to-qa-eks
+      - workflow-status
+
+    if: ${{ always() && (github.repository == 'AOT-Technologies/formio') }}
+
+    uses: ./.github/workflows/docker-image-release-notify.yml
+
+    with:
+      notification_type: workflow
+      status: ${{ needs.build-and-push-image-to-dockerhub.result }}
+      component: "forms-flow-forms"
+      image: ${{ needs.build-and-push-image-to-dockerhub.outputs.image }}
+      branch: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+      actor: ${{ github.actor }}
+      workflow: ${{ github.workflow }}
+      run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      environment: "DEV + QA"
+      namespace: "DEV & QA Multitenant, Opensource, Enterprise"
+      deployment: "forms-flow-forms"
+
+    secrets: inherit

@@ -4,19 +4,12 @@ const _ = require('lodash');
 const async = require('async');
 const { IsolateVM } = require('@formio/vm');
 const util = require('../util/util');
-const LOG_EVENT = 'Save Submission Action';
+const logger = require('../util/logger')('formio:action:saveSubmission');
 
 module.exports = function (router) {
   const Action = router.formio.Action;
-  const debug = require('debug')('formio:action:saveSubmission');
-  const logger = require('../util/logger')('formio:action:saveSubmission');
   const hook = require('../util/hook')(router.formio);
   const ecode = router.formio.util.errorCodes;
-  const logOutput = router.formio.log || debug;
-  const log = (...args) => {
-    logOutput(LOG_EVENT, ...args);
-    logger.error(LOG_EVENT,...args);
-  };
   const config = router.formio.config;
   const SaveSubmissionActionVM = new IsolateVM({ timeoutMs: config.vmTimeout });
 
@@ -99,7 +92,10 @@ module.exports = function (router) {
         // the child submissions.
         const childReq = util.createSubRequest(req);
         if (!childReq) {
-          log(req, ecode.request.EREQRECUR, new Error(ecode.request.EREQRECUR), '#resolve');
+          logger.warning(ecode.request.EREQRECUR, {
+            error_code: 'EREQRECUR',
+            form_id: resource._id,
+          });
           return done(ecode.request.EREQRECUR);
         }
 
@@ -116,7 +112,10 @@ module.exports = function (router) {
             childReq.subId = childReq.params.submissionId = body._id;
             url += '/:submissionId';
           } else {
-            log(req, ecode.resource.ENOIDP, new Error(ecode.resource.ENOIDP), '#resolve');
+            logger.warning(ecode.resource.ENOIDP, {
+              error_code: 'ENOIDP',
+              form_id: childReq.formId,
+            });
             return done(ecode.resource.ENOIDP); // Return an error.
           }
         }
@@ -129,14 +128,12 @@ module.exports = function (router) {
         ) {
           router.resourcejs[url][method].call(this, childReq, res, done);
         } else {
-          log(
-            req,
-            ecode.resource.ENOHANDLER,
-            new Error(ecode.resource.ENOHANDLER),
-            '#resolve',
-            url,
+          logger.error(ecode.resource.ENOHANDLER, {
+            error_code: 'ENOHANDLER',
+            form_id: childReq.formId,
+            route: url,
             method,
-          );
+          });
 
           done(ecode.resource.ENOHANDLER);
         }
@@ -156,7 +153,10 @@ module.exports = function (router) {
           cache.resource = resource;
           then();
         } catch (err) {
-          log(req, ecode.cache.EFORMLOAD, err, '#resolve');
+          logger.warning(ecode.cache.EFORMLOAD, err, {
+            error_code: 'EFORMLOAD',
+            form_id: this.settings.resource,
+          });
           return then(err);
         }
       }.bind(this);
@@ -221,7 +221,10 @@ module.exports = function (router) {
             submission.data = newData;
             req.isTransformedData = true;
           } catch (err) {
-            debug(`Error in submission transform: ${err.message || err}`);
+            logger.warning('Submission transform failed', err, {
+              form_id: req.formId,
+              resource_id: this.settings.resource,
+            });
           }
         }
 
@@ -274,7 +277,11 @@ module.exports = function (router) {
           cache.submission = await updateSubmission(submission);
           then();
         } catch (err) {
-          log(req, ecode.submission.ESUBLOAD, err, '#resolve');
+          logger.warning(ecode.submission.ESUBLOAD, err, {
+            error_code: 'ESUBLOAD',
+            form_id: req.body.form,
+            submission_id: req.body._id,
+          });
           return then(err);
         }
       }.bind(this);
@@ -288,7 +295,6 @@ module.exports = function (router) {
         ],
         function (err) {
           if (err) {
-            log(req, err);
             return next(err);
           }
 

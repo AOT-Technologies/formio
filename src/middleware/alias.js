@@ -1,6 +1,5 @@
 'use strict';
 const url = require('url');
-const debug = require('debug')('formio:alias');
 const logger = require('../util/logger')('formio:alias');
 
 /**
@@ -85,8 +84,7 @@ module.exports = function (router) {
       req.url = `${baseUrl}/form/${form._id}${additional}`;
       return next();
     } catch (err) {
-      debug(`Error: ${err}`);
-      logger.error(`Error: ${err}`);
+      logger.warning('Failed to resolve form alias', err, { form_alias: alias });
       return res.status(400).send('Invalid alias');
     }
   };

@@ -3,18 +3,8 @@
 const jwt = require('jsonwebtoken');
 const _ = require('lodash');
 const util = require('../util/util');
-const debug = {
-  error:(...args)=>{
-    require('debug')('formio:error')(...args);
-    require('../util/logger')('formio:error').error(...args);
-  },
-  handler: require('debug')('formio:middleware:tokenHandler'),
-};
-
-const logger = {
-  handler : require('../util/logger')('formio:middleware:tokenHandler')
-}
-
+const { appendExposeHeaders } = require('./requestContext');
+const logger = require('../util/logger')('formio:middleware:tokenHandler');
 
 /**
  * The Token Handler middleware.
@@ -48,7 +38,7 @@ module.exports = (router) => {
     // Set the headers if they haven't been sent yet.
     if (!res.headersSent) {
       const headers = router.formio.hook.alter('accessControlExposeHeaders', 'x-jwt-token');
-      res.setHeader('Access-Control-Expose-Headers', headers);
+      appendExposeHeaders(res, headers);
       res.setHeader('x-jwt-token', res.token);
     }
   };
@@ -137,8 +127,7 @@ module.exports = (router) => {
     // Decode/refresh the token and store for later middleware.
      jwt.verify(token, process.env.FORMIO_JWT_SECRET||jwtConfig.secret, (err, decoded) => {
       if (err || !decoded) {
-        debug.handler(err || `Token could not decoded: ${token}`);
-        logger.handler.error(err || `Token could not decoded: ${token}`)
+        logger.warning('Token could not be decoded', err || undefined);
         router.formio.audit('EAUTH_TOKENBAD', req, err);
         router.formio.log('Token', req, 'Token could not be decoded');
 
@@ -164,8 +153,7 @@ module.exports = (router) => {
         // If this is a temporary token, then decode it and set it in the request.
         if (decoded.temp) {
           router.formio.log('Token', req, 'Using temp token');
-          debug.handler('Temp token');
-          logger.handler.info('Temp token');
+          logger.debug('Using temporary token');
           req.tempToken = decoded;
           req.user = null;
           req.token = null;

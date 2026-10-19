@@ -1,4 +1,4 @@
-const debug = require('debug')('formio:db');
+const logger = require('../../util/logger')('formio:db');
 
 /**
  * Update 3.1.5
@@ -25,7 +25,7 @@ module.exports = async function (db, config, tools, done) {
   );
 
   if (indexExists) {
-    debug('`data.email` index exists exists, dropping');
+    logger.info('Dropping existing data.email index');
     await submissionsCollection.dropIndex('form_1_project_1_data.email_1_deleted_1');
   }
 
@@ -37,15 +37,17 @@ module.exports = async function (db, config, tools, done) {
     );
   } catch (err) {
     // We assume that an error means MongoDB API incompatibility (i.e. MongoDB < 3.4.0 or DocumentDB) so we'll create the index as normal
-    debug('Case insensitive index creation failed, falling back to non-collated index creation');
+    logger.warning(
+      'Case insensitive index creation failed, falling back to non-collated index creation',
+      err,
+    );
     try {
       await submissionsCollection.createIndex(
         { form: 1, project: 1, 'data.email': 1, deleted: 1 },
         { background: true },
       );
     } catch (err) {
-      debug(err);
-      debug('Index creation failed with error above, skipping');
+      logger.warning('Index creation failed, skipping', err);
     }
   }
 };

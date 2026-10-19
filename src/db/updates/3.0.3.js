@@ -3,6 +3,7 @@
 let async = require('async');
 let util = require('../../util/util');
 let _ = require('lodash');
+const logger = require('../../util/logger')('formio:update:3.0.3');
 
 /**
  * Update 3.0.3
@@ -30,7 +31,7 @@ module.exports = function (db, config, tools, done) {
     .then((forms) => {
       // Iterate through each form.
       let formsUpdated = 0;
-      console.log('Updating ' + forms.length + ' forms.');
+      logger.info('Updating forms', { count: forms.length });
       async.forEachOf(
         forms,
         function (form, key, next) {
@@ -93,7 +94,7 @@ module.exports = function (db, config, tools, done) {
               }
 
               if (++formsUpdated % 100 === 0) {
-                console.log('Updated ' + formsUpdated + ' forms');
+                logger.info('Forms update progress', { count: formsUpdated });
               }
               next();
             })

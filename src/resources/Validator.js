@@ -3,13 +3,7 @@ const _ = require('lodash');
 const { ObjectId } = require('mongodb');
 const FormioCore = require('@formio/core');
 const fetch = require('@formio/node-fetch-http-proxy');
-const debug = {
-  validator: require('debug')('formio:validator'),
-  error: (...args) => {
-    require('debug')('formio:error')(...args);
-    require('../util/logger')('formio:error').error(...args);
-  },
-};
+const logger = require('../util/logger')('formio:validator');
 const Utils = require('../util/util');
 const { RootShim } = require('../vm');
 const loadComponentValueReferences = require('../util/loadComponentValueReferences');
@@ -26,10 +20,6 @@ async function submissionQueryExists(submissionModel, query) {
     return false;
   }
   return true;
-}
-
-const logger = {
-  validator : require('../util/logger')('formio:validator')
 }
 
 /**
@@ -341,13 +331,12 @@ class Validator {
    */
 
   async validate(submission, next) {
-    debug.validator('Starting validation');
-    logger.validator.info('Starting validation');
+    const formId = _.get(this.form, '_id');
+    logger.debug('Starting submission validation', { form_id: formId });
 
     // Skip validation if no data is provided.
     if (!submission.data) {
-      debug.validator('No data skipping validation');
-      logger.validator.info('No data skipping validation');
+      logger.debug('Skipping validation because submission has no data', { form_id: formId });
       return next();
     }
 
@@ -401,7 +390,7 @@ class Validator {
       submission.data = context.data;
       submission.scope = context.scope;
     } catch (err) {
-      debug.error(err.message || err);
+      logger.exception('Submission validation processing failed', err, { form_id: formId });
       return next(err.message || err);
     }
 

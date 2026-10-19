@@ -2,35 +2,19 @@
 
 let async = require('async');
 let _ = require('lodash');
-let debug = {
-  getFormsWithUniqueComponents: (...args) => {
-    require('debug')('formio:update:3.0.5-getFormsWithUniqueComponents')(...args);
-    require('../../util/logger')('formio:update:3.0.5-getFormsWithUniqueComponents').info(...args);
-  },
-  getFormsWithUniqueComponentsInLayoutComponents: (...args) => {
-    require('debug')('formio:update:3.0.5-getFormsWithUniqueComponentsInLayoutComponents')(...args);
-    require('../../util/logger')('formio:update:3.0.5-getFormsWithUniqueComponentsInLayoutComponents').info(...args);
-  },
-  getFormsWithPotentialUniqueComponentsInLayoutComponents: (...args) => {
-    require('debug')('formio:update:3.0.5-getFormsWithPotentialUniqueComponentsInLayoutComponents')(...args);
-    require('../../util/logger')('formio:update:3.0.5-getFormsWithPotentialUniqueComponentsInLayoutComponents').info(...args);
-  },
-  getAffectedSubmissions: (...args) => {
-    require('debug')('formio:update:3.0.5-getAffectedSubmissions')(...args);
-    require('../../util/logger')('formio:update:3.0.5-getAffectedSubmissions').info(...args);
-  },
-  buildUniqueComponentList: (...args) => {
-    require('debug')('formio:update:3.0.5-buildUniqueComponentList')(...args);
-    require('../../util/logger')('formio:update:3.0.5-buildUniqueComponentList').info(...args);
-  },
-  fixSubmissionUniques: (...args) => {
-    require('debug')('formio:update:3.0.5-fixSubmissionUniques')(...args);
-    require('../../util/logger')('formio:update:3.0.5-fixSubmissionUniques').info(...args);
-  },
-  mergeForms: (...args) => {
-    require('debug')('formio:update:3.0.5-mergeForms')(...args);
-    require('../../util/logger')('formio:update:3.0.5-mergeForms').info(...args);
-  },
+const getLogger = require('../../util/logger');
+const logger = {
+  getFormsWithUniqueComponents: getLogger('formio:update:3.0.5-getFormsWithUniqueComponents'),
+  getFormsWithUniqueComponentsInLayoutComponents: getLogger(
+    'formio:update:3.0.5-getFormsWithUniqueComponentsInLayoutComponents',
+  ),
+  getFormsWithPotentialUniqueComponentsInLayoutComponents: getLogger(
+    'formio:update:3.0.5-getFormsWithPotentialUniqueComponentsInLayoutComponents',
+  ),
+  getAffectedSubmissions: getLogger('formio:update:3.0.5-getAffectedSubmissions'),
+  buildUniqueComponentList: getLogger('formio:update:3.0.5-buildUniqueComponentList'),
+  fixSubmissionUniques: getLogger('formio:update:3.0.5-fixSubmissionUniques'),
+  mergeForms: getLogger('formio:update:3.0.5-mergeForms'),
 };
 
 /**
@@ -78,7 +62,10 @@ module.exports = function (db, config, tools, done) {
           if (item) {
             // Coerce all unique string fields to be lowercase.
             if (typeof item === 'string') {
-              debug.fixSubmissionUniques(submission._id.toString());
+              logger.fixSubmissionUniques.debug('Coercing unique field to lowercase', {
+                submission_id: submission._id,
+                path,
+              });
               update['data.' + path] = item.toString().toLowerCase();
             }
             // Coerce all unique string fields in an array to be lowercase.
@@ -94,13 +81,17 @@ module.exports = function (db, config, tools, done) {
         });
 
         if (Object.keys(update).length === 0) {
-          debug.fixSubmissionUniques(
-            submission.form + ': No updates! -> ' + submission._id.toString(),
-          );
+          logger.fixSubmissionUniques.debug('No unique field updates for submission', {
+            form_id: submission.form,
+            submission_id: submission._id,
+          });
           return cb();
         } else {
-          debug.fixSubmissionUniques(submission.form + ': Updates! -> ');
-          debug.fixSubmissionUniques(update);
+          logger.fixSubmissionUniques.debug('Updating unique fields for submission', {
+            form_id: submission.form,
+            submission_id: submission._id,
+            paths: Object.keys(update),
+          });
         }
 
         submissionCollection.updateOne(
@@ -145,7 +136,10 @@ module.exports = function (db, config, tools, done) {
               _.get(component, 'unique') === true &&
               blackListedComponents.indexOf(_.get(component, 'type')) === -1
             ) {
-              debug.buildUniqueComponentList(form._id.toString() + ' -> ' + path);
+              logger.buildUniqueComponentList.debug('Found unique component', {
+                form_id: form._id,
+                path,
+              });
               uniques[form._id.toString()] = uniques[form._id.toString()] || {};
               uniques[form._id.toString()][component.key] = path;
             }
@@ -178,8 +172,9 @@ module.exports = function (db, config, tools, done) {
           return next(err);
         }
 
-        console.log(forms[0]);
-        debug.getFormsWithUniqueComponents(forms.length);
+        logger.getFormsWithUniqueComponents.info('Found forms with unique components', {
+          count: forms.length,
+        });
         return next(null, forms);
       });
   };
@@ -240,7 +235,10 @@ module.exports = function (db, config, tools, done) {
           return next(err);
         }
 
-        debug.getFormsWithUniqueComponentsInLayoutComponents(forms.length);
+        logger.getFormsWithUniqueComponentsInLayoutComponents.info(
+          'Found forms with unique components in layout components',
+          { count: forms.length },
+        );
         return next(null, forms);
       });
   };
@@ -338,8 +336,10 @@ module.exports = function (db, config, tools, done) {
           }
         });
 
-        debug.getFormsWithPotentialUniqueComponentsInLayoutComponents(filtered);
-        debug.getFormsWithPotentialUniqueComponentsInLayoutComponents(filtered.length);
+        logger.getFormsWithPotentialUniqueComponentsInLayoutComponents.info(
+          'Found forms with potential unique components in layout components',
+          { count: filtered.length },
+        );
         return next(null, filtered);
       })
       .catch((err) => next(err));
@@ -358,7 +358,9 @@ module.exports = function (db, config, tools, done) {
       })
       .toArray()
       .then((submissions) => {
-        debug.getAffectedSubmissions(submissions.length);
+        logger.getAffectedSubmissions.info('Found affected submissions', {
+          count: submissions.length,
+        });
         return next(null, submissions);
       })
       .catch((err) => next(err));
@@ -371,10 +373,13 @@ module.exports = function (db, config, tools, done) {
    * @param next
    */
   let mergeForms = function (newForms, next) {
-    debug.mergeForms('Old: ' + forms.length);
-    debug.mergeForms('New: ' + newForms.length);
+    const previousCount = forms.length;
     forms = forms.concat(newForms);
-    debug.mergeForms('Total: ' + forms.length);
+    logger.mergeForms.debug('Merged form lists', {
+      old_count: previousCount,
+      new_count: newForms.length,
+      total_count: forms.length,
+    });
 
     next();
   };

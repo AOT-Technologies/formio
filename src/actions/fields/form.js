@@ -1,6 +1,7 @@
 'use strict';
 
 const _ = require('lodash');
+const logger = require('../../util/logger')('formio:action:fields:form');
 
 module.exports = (router) => {
   /**
@@ -141,7 +142,11 @@ module.exports = (router) => {
             .findOne({ _id: compValue._id, deleted: { $eq: null } })
             .exec();
           if (!submission) {
-            return router.formio.util.log('No subform found to update external ids.');
+            logger.warning('No subform submission found to update external ids', {
+              submission_id: compValue._id,
+              component_key: component.key,
+            });
+            return;
           }
 
           // Update the submission's externalIds.
@@ -166,7 +171,11 @@ module.exports = (router) => {
             );
           }
         } catch (err) {
-          return router.formio.util.log(err);
+          logger.exception('Failed to update subform external ids', err, {
+            submission_id: compValue._id,
+            parent_submission_id: res.resource.item._id,
+          });
+          return;
         }
       }
     }

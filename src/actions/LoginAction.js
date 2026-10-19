@@ -1,22 +1,13 @@
 'use strict';
 
 const _ = require('lodash');
-
-const LOG_EVENT = 'Login Action';
+const logger = require('../util/logger')('formio:action:login');
 
 module.exports = (router) => {
   const Action = router.formio.Action;
   const hook = require('../util/hook')(router.formio);
-  const debug = require('debug')('formio:action:login');
-  const logger = require('../util/logger')('formio:action:login')
   const ecode = router.formio.util.errorCodes;
-  const logOutput = router.formio.log || debug;
   const audit = router.formio.audit || (() => {});
-  const log = (...args) => {
-    logOutput(LOG_EVENT, ...args);
-    logger.error(LOG_EVENT,...args)
-  };
-
 
   /**
    * AuthAction class.
@@ -226,7 +217,10 @@ module.exports = (router) => {
         return next(error);
       } catch (err) {
         if (err) {
-          log(req, ecode.auth.ELOGINCOUNT, err);
+          logger.exception(ecode.auth.ELOGINCOUNT, err, {
+            error_code: 'ELOGINCOUNT',
+            user_id: user._id,
+          });
           return next(ecode.auth.ELOGINCOUNT);
         }
 
@@ -255,9 +249,12 @@ module.exports = (router) => {
       }
 
       if (!this.settings) {
-        audit('EAUTH_AUTHCONFIG', req, _.get(req.submission.data, this.settings.username));
+        audit('EAUTH_AUTHCONFIG', req);
         return res.status(400).send('Misconfigured Login Action.');
       }
+
+      // The attempted user name, passed to the audit hook (masked when it is logged).
+      const auditUser = () => _.get(_.get(req, 'submission.data'), this.settings.username);
 
       if (
         !req.submission ||
@@ -265,7 +262,7 @@ module.exports = (router) => {
         !_.has(req.submission.data, this.settings.username) ||
         !_.has(req.submission.data, this.settings.password)
       ) {
-        audit('EAUTH_PASSWORD', req, _.get(req.submission.data, this.settings.username));
+        audit('EAUTH_PASSWORD', req, auditUser());
         return res.status(401).send('User or password was incorrect.');
       }
 
@@ -278,16 +275,23 @@ module.exports = (router) => {
         _.get(req.submission.data, this.settings.password),
         (err, response) => {
           if (err && !response) {
-            audit('EAUTH_NOUSER', req, _.get(req.submission.data, this.settings.username));
-            log(req, ecode.auth.EAUTH, err);
+            audit('EAUTH_NOUSER', req, auditUser());
+            logger.warning(ecode.auth.EAUTH, {
+              error_code: 'EAUTH',
+              reason: err.message || err,
+            });
             return res.status(401).send(err);
           }
 
           // Check the amount of attempts made by this user.
           this.checkAttempts(err, req, response.user, async (error) => {
             if (error) {
-              audit('EAUTH_LOGINCOUNT', req, _.get(req.submission.data, this.settings.username));
-              log(req, ecode.auth.EAUTH, error);
+              audit('EAUTH_LOGINCOUNT', req, auditUser());
+              logger.warning(ecode.auth.EAUTH, {
+                error_code: 'EAUTH',
+                reason: error.message || error,
+                user_id: _.get(response, 'user._id'),
+              });
               return res.status(401).send(error);
             }
 
@@ -305,7 +309,10 @@ module.exports = (router) => {
             hook.alter('oAuthResponse', req, res, () => {
               router.formio.auth.currentUser(req, res, (err) => {
                 if (err) {
-                  log(req, ecode.auth.EAUTH, err);
+                  logger.warning(ecode.auth.EAUTH, err, {
+                    error_code: 'EAUTH',
+                    user_id: req.user._id,
+                  });
                   return res.status(401).send(err.message);
                 }
                 hook.alter('currentUserLoginAction', req, res);

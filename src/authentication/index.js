@@ -12,12 +12,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const util = require('../util/util');
 const _ = require('lodash');
-const debug = {
-  authenticate: require('debug')('formio:authentication:authenticate'),
-};
-const logger = {
-  authenticate: require('../util/logger')('formio:authentication:authenticate'),
-};
+const { appendExposeHeaders } = require('../middleware/requestContext');
+const logger = require('../util/logger')('formio:authentication:authenticate');
 
 module.exports = (router) => {
   const audit = router.formio.audit || (() => {});
@@ -96,9 +92,8 @@ module.exports = (router) => {
         if (regex.test(`${req.baseUrl}${urlPath}`)) {
           return true;
         }
-      } catch (ignoreErr) {
-        debug.authenticate('Bad token allow string.');
-        logger.authenticate.error('Bad token allow string.');
+      } catch (err) {
+        logger.warning('Invalid token allow pattern', err);
       }
 
       return false;
@@ -287,12 +282,10 @@ module.exports = (router) => {
         hook.alter('user', user, (err, _user) => {
           if (err) {
             // Attempt to fail safely and not update the user reference.
-            debug.authenticate(err);
-            logger.authenticate.error(err);
+            logger.warning('User hook failed during login', err, { user_id: user._id });
           } else {
             // Update the user with the hook results.
-            debug.authenticate(user);
-            logger.authenticate.info(user);
+            logger.debug('User updated by login hook', { user_id: user._id });
             user = _user;
           }
 
@@ -416,7 +409,7 @@ module.exports = (router) => {
     // Set the headers if they haven't been sent yet.
     if (!res.headersSent) {
       const headers = router.formio.hook.alter('accessControlExposeHeaders', 'x-jwt-token');
-      res.setHeader('Access-Control-Expose-Headers', headers);
+      appendExposeHeaders(res, headers);
       res.setHeader('x-jwt-token', res.token);
     }
 

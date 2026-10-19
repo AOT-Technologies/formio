@@ -22,6 +22,7 @@ const {
   getSelectTemplate,
 } = require('./utils');
 const macros = require('./nunjucks-macros');
+const logger = require('../logger')('formio:email:renderEmail');
 
 const omitUndefined = (obj) => _.omitBy(obj, _.isUndefined);
 
@@ -376,7 +377,7 @@ async function renderEmail({ render, context = {}, vm }) {
     const res = await vm.evaluate(getScript(render), data);
     return res;
   } catch (err) {
-    console.warn(err);
+    logger.warning('Failed to render email template', err, { render_method: renderMethod });
   }
 }
 

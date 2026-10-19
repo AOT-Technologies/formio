@@ -3,10 +3,6 @@
 const mongoose = require('mongoose');
 const ObjectId = mongoose.Types.ObjectId;
 const _ = require('lodash');
-const debug = (...args)=>{
-  require('debug')('formio:middleware:bootstrapFormAccess')(...args);
-  require("../util/logger")('formio:middleware:bootstrapFormAccess').error(...args)
-};
 
 /**
  * Middleware to bootstrap the access of forms.
@@ -79,7 +75,6 @@ module.exports = function (router) {
       res.resource.item = _.omit(_.omit(form, 'deleted'), '__v');
       return next();
     } catch (err) {
-      debug(err);
       return next(err);
     }
   };

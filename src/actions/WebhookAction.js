@@ -3,19 +3,13 @@
 const fetch = require('@formio/node-fetch-http-proxy');
 const _ = require('lodash');
 const util = require('../util/util');
+const logging = require('../util/logger');
 
-const LOG_EVENT = 'Webhook Action';
+const logger = logging('formio:action:webhook');
 
 module.exports = function (router) {
   const Action = router.formio.Action;
   const hook = router.formio.hook;
-  const debug = require('debug')('formio:action:webhook');
-  const logger = require('../util/logger')('formio:action:webhook');
-  const logOutput = router.formio.log || debug;
-  const log = (...args) => {
-    logOutput(LOG_EVENT, ...args);
-    logger.error(LOG_EVENT,...args);
-  };
 
   /**
    * WebhookAction class.
@@ -117,7 +111,6 @@ module.exports = function (router) {
      */
     resolve(handler, method, req, res, next, setActionItemMessage) {
       const settings = this.settings;
-      const logerr = (...args) => log(req, ...args, '#resolve');
 
       /**
        * Util function to handle success for a potentially blocking request.
@@ -151,7 +144,13 @@ module.exports = function (router) {
       const handleError = (data, response) => {
         setActionItemMessage('Webhook failed', response);
         const message = data ? data.message || data : response.statusMessage;
-        logerr(message);
+        // Only log a string reason; an object here is the remote response body.
+        logger.warning('Webhook request failed', {
+          form_id: req.formId,
+          action_title: this.title,
+          status_code: _.get(response, 'status'),
+          reason: _.isString(message) ? message : _.get(response, 'statusMessage'),
+        });
 
         if (!_.get(settings, 'block') || _.get(settings, 'block') === false) {
           return;
@@ -218,10 +217,10 @@ module.exports = function (router) {
         const makeRequest = (url, method, credentials, payload) => {
           const options = {
             method,
-            headers: {
+            headers: logging.context.outboundHeaders({
               'content-type': 'application/json',
               accept: 'application/json',
-            },
+            }),
           };
           if (credentials.username) {
             options.headers.Authorization = `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`;

@@ -1,8 +1,7 @@
 'use strict';
 
 const _ = require('lodash');
-const debug = require('debug')('formio:middleware:submissionResourceAccessFilter');
-const logger = require('../util/logger')('formio:middleware:submissionResourceAccessFilter');
+const logger = require('../util/logger')('formio:middleware:submissionFieldMatchAccessFilter');
 
 module.exports = function (router) {
   return function submissionResourceAccessFilter(req, res, next) {
@@ -10,8 +9,7 @@ module.exports = function (router) {
 
     // Skip this filter, if request is from an administrator.
     if (req.isAdmin) {
-      debug('Skipping, request is from an administrator.');
-      logger.info('Skipping, request is from an administrator.');
+      logger.debug('Skipping access filter for administrator request');
       return next();
     }
 

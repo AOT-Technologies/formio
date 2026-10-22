@@ -11,17 +11,27 @@ const fetch = require('@formio/node-fetch-http-proxy');
 const { mockBrowserContext } = require('@formio/vm');
 mockBrowserContext();
 const Formio = require('@formio/js');
-const debug = {
-  idToBson: require('debug')('formio:util:idToBson'),
-  getUrlParams: require('debug')('formio:util:getUrlParams'),
-  removeProtectedFields: require('debug')('formio:util:removeProtectedFields'),
-  uniqueMachineName: require('debug')('formio:util:uniqueMachineName'),
-};
+const getLogger = require('./logger');
 
 const logger = {
-  idToBson: require('../util/logger.js')('formio:util:idToBson'),
-  getUrlParams: require('../util/logger.js')('formio:util:getUrlParams'),
-  removeProtectedFields: require('../util/logger.js')('formio:util:removeProtectedFields'),
+  util: getLogger('formio:util'),
+  idToBson: getLogger('formio:util:idToBson'),
+  getUrlParams: getLogger('formio:util:getUrlParams'),
+  removeProtectedFields: getLogger('formio:util:removeProtectedFields'),
+  uniqueMachineName: getLogger('formio:util:uniqueMachineName'),
+};
+
+/**
+ * Write legacy free-form content (string, Error or object) to the `formio:util` logger.
+ */
+const logContent = (level, content) => {
+  if (content instanceof Error) {
+    logger.util.error(content.message, content);
+  } else if (typeof content === 'string') {
+    logger.util[level](content);
+  } else {
+    logger.util[level](level === 'error' ? 'Error event' : 'Log event', { content });
+  }
 };
 
 const Utils = {
@@ -30,17 +40,13 @@ const Utils = {
   deleteProp: deleteProp,
 
   /**
-   * A wrapper around console.log that gets ignored by eslint.
+   * Log content at INFO level through the structured logger (Errors are logged at ERROR).
    *
    * @param {*} content
-   *   The content to pass to console.log.
+   *   The content to log.
    */
   log(content) {
-    if (process.env.TEST_SUITE) {
-      return;
-    }
-
-    console.log(content);
+    logContent('info', content);
   },
 
   /**
@@ -74,13 +80,13 @@ const Utils = {
   },
 
   /**
-   * A wrapper around console.error that gets ignored by eslint.
+   * Log content at ERROR level through the structured logger.
    *
    * @param {*} content
-   *   The content to pass to console.error.
+   *   The content to log.
    */
   error(content) {
-    console.error(content);
+    logContent('error', content);
   },
 
   /**
@@ -410,8 +416,6 @@ const Utils = {
     }
     const parsed = nodeUrl.parse(url);
     let parts = parsed.pathname.split('/');
-    debug.getUrlParams(parsed);
-    logger.getUrlParams.info(parsed);
 
     // Remove element originating from first slash.
     parts = _.tail(parts);
@@ -426,8 +430,7 @@ const Utils = {
       urlParams[parts[a].toLowerCase()] = parts[a + 1];
     }
 
-    debug.getUrlParams(urlParams);
-    logger.getUrlParams.info(urlParams);
+    logger.getUrlParams.debug('Parsed URL parameters', { param_keys: Object.keys(urlParams) });
     return urlParams;
   },
 
@@ -480,8 +483,7 @@ const Utils = {
     try {
       _id = _.isObject(_id) ? _id : new mongoose.Types.ObjectId(_id);
     } catch (ignoreErr) {
-      debug.idToBson(`Unknown _id given: ${_id}, typeof: ${typeof _id}`);
-      logger.idToBson.error(`Unknown _id given: ${_id}, typeof: ${typeof _id}`);
+      logger.idToBson.warning('Invalid id given', { id: String(_id), id_type: typeof _id });
       _id = false;
     }
 
@@ -590,8 +592,9 @@ const Utils = {
         const displayForRole = component?.properties?.displayForRole;
         // need to check multiple roles
         if (component.protected || (displayForRole && !roles.includes(displayForRole))) {
-          debug.removeProtectedFields('Removing protected field:', component.key);
-          logger.removeProtectedFields.info('Removing protected field:', component.key);
+          logger.removeProtectedFields.debug('Removing protected field', {
+            component_key: component.key,
+          });
           modifyFields.push(deleteProp(path));
         } else if (component.type === 'signature' && action === 'index' && !doNotMinify) {
           modifyFields.push((submission) => {
@@ -675,9 +678,10 @@ const Utils = {
         // Fallback if bad hint or index not found
         if (err.code === 2 || err.code === 291) {
           records = await model.find(query).lean().exec();
-          debug.uniqueMachineName(
-            `Hint rejected (code ${err.code}) on ${model.modelName}; falling back to non-hinted query.`,
-          );
+          logger.uniqueMachineName.debug('Index hint rejected, using non-hinted query', {
+            code: err.code,
+            model: model.modelName,
+          });
         } else {
           throw err;
         }

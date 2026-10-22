@@ -2,11 +2,11 @@
 
 const nodemailer = require('nodemailer');
 const xss = require('xss');
-const debug = {
-  email: require('debug')('formio:settings:email'),
-  send: require('debug')('formio:settings:send'),
-  error: require('debug')('formio:error'),
-  nunjucksInjector: require('debug')('formio:email:nunjucksInjector'),
+const logging = require('../logger');
+const logger = {
+  email: logging('formio:settings:email'),
+  send: logging('formio:settings:send'),
+  nunjucksInjector: logging('formio:email:nunjucksInjector'),
 };
 const fetch = require('@formio/node-fetch-http-proxy');
 const { IsolateVM } = require('@formio/vm');
@@ -18,6 +18,22 @@ const { CORE_LODASH_MOMENT_INPUTMASK_NUNJUCKS } = require('../../vm');
 const DEFAULT_TRANSPORT = process.env.DEFAULT_TRANSPORT;
 const EMAIL_OVERRIDE = process.env.EMAIL_OVERRIDE;
 const EMAIL_CHUNK_SIZE = process.env.EMAIL_CHUNK_SIZE || 100;
+
+/**
+ * Describe the recipients of an email for logging, without exposing the full address list.
+ *
+ * @param emails {String|Array} A comma separated list or an array of addresses.
+ * @return {{recipient_count: number, recipient: (string|undefined)}}
+ */
+const describeRecipients = (emails) => {
+  const recipients = (_.isString(emails) ? emails.split(',') : _.castArray(emails || []))
+    .map((address) => _.trim(address))
+    .filter(Boolean);
+  return {
+    recipient_count: recipients.length,
+    recipient: recipients.length ? logging.maskEmail(recipients[0]) : undefined,
+  };
+};
 
 /**
  * The email sender for emails.
@@ -88,7 +104,7 @@ module.exports = (formio) => {
         return availableTransports;
       }
     } catch (err) {
-      debug.email(err);
+      logger.email.warning('Failed to determine available email transports', err);
     }
   };
 
@@ -197,12 +213,16 @@ module.exports = (formio) => {
         .catch(reject);
     });
 
-  const getEnvSettings = (variable) => {
+  const getEnvSettings = (variable, name) => {
     let settings = null;
     try {
       settings = JSON.parse(variable);
     } catch (err) {
-      console.log(`Cannot read ${variable}: ${err.message}`);
+      // The variable (and the parser message, which quotes it) may hold credentials: log neither.
+      logger.email.warning('Cannot parse email transport settings from environment', {
+        variable: name,
+        error: err.name,
+      });
       settings = null;
     }
     return settings;
@@ -228,7 +248,11 @@ module.exports = (formio) => {
       if (mail.html && typeof mail.html === 'string') {
         mail.html = mail.html.replace(/\n/g, '');
       }
-      debug.nunjucksInjector(mail);
+      logger.nunjucksInjector.debug('Rendering email template', {
+        transport: mail.transport,
+        rendering_method: mail.renderingMethod,
+        ...describeRecipients(mail.to),
+      });
 
       // Allow the nunjucks templates to be reflective.
       params.mail = mail;
@@ -241,10 +265,13 @@ module.exports = (formio) => {
         timeout: formio.config.vmTimeout,
       })
         .then((injectedEmail) => {
-          debug.nunjucksInjector(injectedEmail);
           if (!injectedEmail) {
             return reject(`An error occurred while processing the Email.`);
           }
+          logger.nunjucksInjector.debug('Email template rendered', {
+            transport: injectedEmail.transport,
+            ...describeRecipients(injectedEmail.to),
+          });
 
           return resolve(injectedEmail);
         })
@@ -299,7 +326,6 @@ module.exports = (formio) => {
           break;
         case 'sendgrid':
           if (_.has(settings, 'email.sendgrid')) {
-            debug.email(settings.email.sendgrid);
             transporter = nodemailer.createTransport({
               host: 'smtp.sendgrid.net',
               port: 587,
@@ -382,11 +408,11 @@ module.exports = (formio) => {
               try {
                 const response = await fetch(settings.email.custom.url, {
                   method: 'POST',
-                  headers: {
+                  headers: logging.context.outboundHeaders({
                     'content-type': 'application/json',
                     accept: 'application/json',
                     ...authHeader,
-                  },
+                  }),
                   body: JSON.stringify(mail),
                 });
 
@@ -498,14 +524,12 @@ module.exports = (formio) => {
                 try {
                   return transporter.sendMail(email, (err, info) => {
                     if (err) {
-                      debug.error(err);
                       return reject(err);
                     }
 
                     return resolve(info);
                   });
                 } catch (err) {
-                  console.log(err);
                   reject(err);
                 }
               });
@@ -520,13 +544,14 @@ module.exports = (formio) => {
           .then((email) => {
             let emails = [];
 
-            debug.send(`message.sendEach: ${message.sendEach}`);
-            // debug.send(`email: ${JSON.stringify(email)}`);
+            logger.send.debug('Preparing emails', {
+              send_each: message.sendEach === true,
+              ...describeRecipients(email.to),
+            });
             if (message.sendEach === true) {
               const addresses = _.uniq(email.to.split(',').map(_.trim)).filter(
                 (address) => address.length && address.length > 0,
               );
-              // debug.send(`addresses: ${JSON.stringify(addresses)}`);
               // Make a copy of the email for each recipient.
               emails = addresses.map((address) => Object.assign({}, email, { to: address }));
             } else {
@@ -534,8 +559,6 @@ module.exports = (formio) => {
                 email,
               ];
             }
-
-            // debug.send(`emails: ${JSON.stringify(emails)}`);
 
             const chunks = _.chunk(emails, EMAIL_CHUNK_SIZE);
             return chunks.reduce((result, chunk) => {
@@ -567,14 +590,12 @@ module.exports = (formio) => {
       let emailType = message.transport ? message.transport : 'default';
 
       const _config = formio && formio.config && formio.config.email && formio.config.email.type;
-      debug.send(message);
-      debug.send(emailType);
       // Get the settings.
       const settings = await hook.settings(req);
       // Force the email type to custom for EMAIL_OVERRIDE which will allow
       // us to use ngrok to test emails out of test platform.
       if (EMAIL_OVERRIDE) {
-        const override = getEnvSettings(EMAIL_OVERRIDE);
+        const override = getEnvSettings(EMAIL_OVERRIDE, 'EMAIL_OVERRIDE');
         if (override && override.hasOwnProperty('transport')) {
           emailType = override.transport;
           settings.email = {};
@@ -585,7 +606,7 @@ module.exports = (formio) => {
       }
 
       if (emailType === 'default' && DEFAULT_TRANSPORT) {
-        const defaultTransport = getEnvSettings(DEFAULT_TRANSPORT);
+        const defaultTransport = getEnvSettings(DEFAULT_TRANSPORT, 'DEFAULT_TRANSPORT');
         if (defaultTransport && defaultTransport.hasOwnProperty('transport')) {
           emailType = defaultTransport.transport;
           settings.email = {};
@@ -598,9 +619,16 @@ module.exports = (formio) => {
 
       // If we don't have a valid transport, don't waste time with nunjucks.
       if (isTransportValid(transporter)) {
-        debug.error(`Could not determine which email transport to use for ${emailType}`);
+        logger.send.warning('Could not determine which email transport to use', {
+          transport: emailType,
+        });
         return;
       }
+
+      logger.send.debug('Sending email', {
+        transport: emailType,
+        ...describeRecipients(message.emails),
+      });
 
       const options = {
         params,
@@ -608,7 +636,6 @@ module.exports = (formio) => {
 
       return await send(transporter, message, options);
     } catch (err) {
-      debug.send(err);
       throw new Error(err);
     }
   };

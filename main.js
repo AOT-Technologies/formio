@@ -8,7 +8,9 @@ const logger = logging('formio:main');
  */
 const exitOnFatal = (event, message) => (err) => {
   logger.exception(message, err instanceof Error ? err : new Error(String(err)), { event });
-  logging.flush().then(() => process.exit(1));
+  // Exit even if the flush rejects; an unhandled rejection here would re-enter this handler.
+  const exit = () => process.exit(1);
+  logging.flush().then(exit, exit);
 };
 
 // Route runtime warnings (e.g. deprecations) through the logger instead of plain stderr text.
@@ -25,8 +27,10 @@ process.on('unhandledRejection', exitOnFatal('unhandled_rejection', 'Unhandled p
 process.on('uncaughtException', exitOnFatal('uncaught_exception', 'Uncaught exception'));
 
 require('colors');
-require('./server')().then(function (state) {
-  state.server.listen(state.config.port, () => {
-    logger.info('Service started', { event: 'service_started', port: Number(state.config.port) });
-  });
-});
+require('./server')()
+  .then(function (state) {
+    state.server.listen(state.config.port, () => {
+      logger.info('Service started', { event: 'service_started', port: Number(state.config.port) });
+    });
+  })
+  .catch(exitOnFatal('service_start_failed', 'Service failed to start'));

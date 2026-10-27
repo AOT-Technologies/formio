@@ -9,7 +9,7 @@
 - `Untested Features`: Newly introduced features or components that are yet to be thoroughly tested.
 - `Upcoming Features`: Planned features or enhancements that will be available in future releases.
 - `Known Issues`: Existing issues or problems that are acknowledged and will be addressed in subsequent updates.
-# Version 8.3.1
+# Version 8.3.2
 ### Fixed
 - Rebuilt the Docker image on Node.js 24.22.1 to address the Node.js security release of 21 October 2026 (10 CVEs, 4 high). This includes CVE-2026-111497, an out-of-bounds write in the Brotli decoder that is reachable through `Content-Encoding: br` request bodies before authentication [FWF-6795].
 ### Changed

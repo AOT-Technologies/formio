@@ -4,7 +4,9 @@
 
 # Use Node image, maintained by Docker:
 # hub.docker.com/r/_/node/
-FROM node:24-alpine
+# Pinned to an exact Node release for reproducible builds. Bump this tag
+# whenever Node.js publishes a security release (see FWF-6795).
+FROM node:24.22.1-alpine
 
 # set label for image
 LABEL Name="formsflow"

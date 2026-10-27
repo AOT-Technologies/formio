@@ -9,6 +9,13 @@
 - `Untested Features`: Newly introduced features or components that are yet to be thoroughly tested.
 - `Upcoming Features`: Planned features or enhancements that will be available in future releases.
 - `Known Issues`: Existing issues or problems that are acknowledged and will be addressed in subsequent updates.
+# Version 8.3.1
+### Fixed
+- Rebuilt the Docker image on Node.js 24.22.1 to address the Node.js security release of 21 October 2026 (10 CVEs, 4 high). This includes CVE-2026-111497, an out-of-bounds write in the Brotli decoder that is reachable through `Content-Encoding: br` request bodies before authentication [FWF-6795].
+### Changed
+- Pinned the Docker base image to `node:24.22.1-alpine` instead of the floating `node:24-alpine` tag so that builds are reproducible [FWF-6795].
+### Known Issues
+- Node.js 24.22.1 removes the eMudhra root certificates (emSign Root CA - C1, emSign ECC Root CA - G3, emSign ECC Root CA - C3) from its trust store. SMTP, webhook or MongoDB TLS endpoints whose certificates chain to these roots will fail with a certificate error. These roots must not be added back.
 # Version 7.3.0
 ### Fixed
 - Fixed tenant key handling for authenticated vs anonymous users [FWF-5328].

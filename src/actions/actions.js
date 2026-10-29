@@ -3,18 +3,8 @@
 const Resource = require('resourcejs');
 const async = require('async');
 const _ = require('lodash');
-const loggerService = require('../util/logger');
 const moment = require('moment');
-const debug = {
-  error: (...args) => {
-    require('debug')('formio:error')(...args);
-    loggerService('formio:error').error(...args)
-  },
-  action: (...args) =>{
-    require('debug')('formio:action')(...args);
-    loggerService('formio:action').info(...args);
-  }
-};
+const logger = require('../util/logger')('formio:action');
 const util = require('../util/util');
 const { IsolateVM } = require('@formio/vm');
 const {
@@ -302,7 +292,10 @@ module.exports = (router) => {
           return result;
         } catch (err) {
           router.formio.log('Error during executing action custom logic', req, err.message || err);
-          debug.error(err.message || err);
+          logger.warning('Action condition evaluation failed', err, {
+            form_id: action.form,
+            action_name: action.name,
+          });
           return false;
         }
       }
@@ -314,7 +307,12 @@ module.exports = (router) => {
         const eq = condition.eq || '';
         const value = String(await getComponentValueFromRequest(req, res, field));
         const compare = String(condition.value || '');
-        debug.action('\nfield', field, '\neq', eq, '\nvalue', value, '\ncompare', compare);
+        logger.debug('Evaluating action condition', {
+          form_id: action.form,
+          action_name: action.name,
+          field,
+          operator: eq,
+        });
 
         // Cancel the action if the field and eq aren't set, in addition to the value not being the same as compare.
         return (
@@ -749,7 +747,10 @@ module.exports = (router) => {
       return await router.formio.cache.loadSubmission(req, req.body.form, req.body._id);
     } catch (err) {
       router.formio.log('Error during executing action custom logic', req, err);
-      debug.error(err);
+      logger.warning('Failed to load deleted submission for action condition', err, {
+        form_id: req.body.form,
+        submission_id: req.body._id,
+      });
       return false;
     }
   }
@@ -863,7 +864,10 @@ module.exports = (router) => {
           res.json(info);
         });
       } catch (e) {
-        debug.error(e);
+        logger.exception('Failed to build action settings form', e, {
+          form_id: req.params.formId,
+          action_name: req.params.name,
+        });
         return res.sendStatus(400);
       }
     });

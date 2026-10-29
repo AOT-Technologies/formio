@@ -15,6 +15,8 @@ const config = require('config');
 const async = require('async');
 const mongodb = require('mongodb');
 const MongoClient = mongodb.MongoClient;
+const { sanitizeMongoConnectionString } = require('../util');
+const logger = require('../../util/logger')('formio:update:3.1.1');
 
 (async () => {
   try {
@@ -98,7 +100,9 @@ const MongoClient = mongodb.MongoClient;
                   return setDateField(field, submission.data) || changed;
                 }, false);
                 if (changed) {
-                  console.log(`Updating date fields for submission: ${submission._id}`);
+                  logger.info('Updating date fields for submission', {
+                    submission_id: submission._id,
+                  });
 
                   submissionCollection.updateOne(
                     {
@@ -141,13 +145,15 @@ const MongoClient = mongodb.MongoClient;
       },
       (err) => {
         if (err) {
-          return console.log('ERROR', err);
+          return logger.exception('Date fields update failed', err);
         }
 
-        console.log('Done');
+        logger.info('Date fields update complete');
       },
     );
-  } catch (ignoreErr) {
-    return console.log(`Could not connect to database ${config.mongo}`);
+  } catch (err) {
+    return logger.exception('Could not connect to database', err, {
+      mongo_url: sanitizeMongoConnectionString(String(config.mongo)),
+    });
   }
 })();

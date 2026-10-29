@@ -7,40 +7,56 @@ const express = require('express');
 const nunjucks = require('nunjucks');
 const fs = require('fs-extra');
 const path = require('path');
-const util = require('./src/util/util');
 require('colors');
 const Q = require('q');
 const cors = require('cors');
+const logging = require('./src/util/logger');
+const { requestContext, errorHandler } = require('./src/middleware/requestContext');
+const logger = logging('formio:server');
 const test = process.env.TEST_SUITE;
 const noInstall = Number(process.env.NO_INSTALL) || 0;
 
-module.exports = function (options) {
-  options = options || {};
-  const q = Q.defer();
-
-  util.log('');
+/**
+ * Print the startup banner. Only used for human-readable (console) output.
+ */
+const printBanner = function () {
   const rl = require('readline').createInterface({
     input: require('fs').createReadStream('logo.txt'),
   });
 
+  process.stdout.write('\n');
   rl.on('line', function (line) {
-    util.log(
-      line.substring(0, 4) +
+    process.stdout.write(
+      `${
+        line.substring(0, 4) +
         line.substring(4, 30).cyan.bold +
         line.substring(30, 33) +
         line.substring(33, 42).green.bold +
-        line.substring(42),
+        line.substring(42)
+      }\n`,
     );
   });
 
   rl.on('close', function () {
     // Print the welcome screen.
-    util.log('');
-    util.log(fs.readFileSync('welcome.txt').toString().green);
+    process.stdout.write(`\n${fs.readFileSync('welcome.txt').toString().green}\n`);
   });
+};
+
+module.exports = function (options) {
+  options = options || {};
+  const q = Q.defer();
+
+  if (logging.config.format === 'console' && !test) {
+    printBanner();
+  }
+  logger.info('Service starting', { event: 'service_starting' });
 
   // Use the express application.
   const app = options.app || express();
+
+  // Establish the request context and access log before anything else.
+  app.use(requestContext);
 
   // Use the given config.
   const config = options.config || require('config');
@@ -86,6 +102,9 @@ module.exports = function (options) {
       // Mount the Form.io API platform.
       app.use(options.mount || '/', server);
 
+      // Log unhandled errors and answer with a generic 500.
+      app.use(errorHandler);
+
       // Allow tests access server internals.
       app.formio = formio;
 
@@ -122,7 +141,7 @@ module.exports = function (options) {
       require('./install')(formio, install, function (err) {
         if (err) {
           if (err !== 'Installation canceled.') {
-            return util.log(err.message);
+            return logger.exception('Installation failed', err, { event: 'install_failed' });
           }
         }
 

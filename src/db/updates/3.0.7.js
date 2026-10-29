@@ -1,9 +1,10 @@
 'use strict';
 
 let async = require('async');
-let debug = {
-  findBrokenForms: require('debug')('formio:update:3.0.7-findBrokenForms'),
-  fixTypes: require('debug')('formio:update:3.0.7-fixTypes'),
+const getLogger = require('../../util/logger');
+const logger = {
+  findBrokenForms: getLogger('formio:update:3.0.7-findBrokenForms'),
+  fixTypes: getLogger('formio:update:3.0.7-fixTypes'),
 };
 
 /**
@@ -38,7 +39,7 @@ module.exports = function (db, config, tools, done) {
           .snapshot(true)
           .toArray()
           .then((forms) => {
-            debug.findBrokenForms(forms.length);
+            logger.findBrokenForms.info('Found forms with invalid types', { count: forms.length });
             return next(null, forms);
           })
           .catch((err) => next(err));
@@ -50,7 +51,7 @@ module.exports = function (db, config, tools, done) {
             formCollection
               .updateOne({ _id: tools.util.idToBson(form._id) }, { $set: { type: 'form' } })
               .then(() => {
-                debug.fixTypes('Updated: ' + form._id);
+                logger.fixTypes.debug('Fixed form type', { form_id: form._id });
                 return callback();
               })
               .catch((err) => callback(err));

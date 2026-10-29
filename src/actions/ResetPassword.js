@@ -3,8 +3,7 @@
 const util = require('../util/util');
 const jwt = require('jsonwebtoken');
 const _ = require('lodash');
-
-const LOG_EVENT = 'Reset Password Action';
+const logger = require('../util/logger')('formio:action:passrest');
 
 // Default allows for LONG passphrases, but not DoS big
 // Refrence: next line is ~70 characters
@@ -14,14 +13,7 @@ module.exports = (router) => {
   const Action = router.formio.Action;
   const hook = require('../util/hook')(router.formio);
   const emailer = require('../util/email')(router.formio);
-  const debug = require('debug')('formio:action:passrest');
-  const logger = require('../util/logger')('formio:action:passrest')
   const ecode = router.formio.util.errorCodes;
-  const logOutput = router.formio.log || debug;
-  const log = (...args) => {
-    logOutput(LOG_EVENT, ...args);
-    logger.error(LOG_EVENT,...args);
-  };
 
   /**
    * ResetPasswordAction class.
@@ -183,7 +175,7 @@ module.exports = (router) => {
           },
         ]);
       } catch (err) {
-        log(req, ecode.emailer.ENOTRANSP, err);
+        logger.warning(ecode.emailer.ENOTRANSP, err, { error_code: 'ENOTRANSP' });
         return next(err);
       }
     }
@@ -220,14 +212,17 @@ module.exports = (router) => {
       try {
         const submission = await submissionModel.findOne(hook.alter('submissionQuery', query, req));
         if (!submission) {
-          log(req, ecode.submission.ENOSUB);
+          logger.debug(ecode.submission.ENOSUB, {
+            error_code: 'ENOSUB',
+            resource_count: token.resources.length,
+          });
           return next(ecode.submission.ENOSUB);
         }
 
         // Submission found.
         return next(null, submission);
       } catch (err) {
-        log(req, ecode.submission.ENOSUB, err);
+        logger.exception(ecode.submission.ENOSUB, err, { error_code: 'ENOSUB' });
         return next(ecode.submission.ENOSUB);
       }
     }
@@ -251,20 +246,23 @@ module.exports = (router) => {
       this.getSubmission(req, token, (err, submission) => {
         // Make sure we found the user.
         if (err || !submission) {
-          log(req, ecode.user.ENOUSER, err);
+          logger.warning(ecode.user.ENOUSER, { error_code: 'ENOUSER' });
           return next(ecode.user.ENOUSER);
         }
 
         // Get the name of the password field.
         if (!this.settings.password) {
-          log(req, ecode.auth.EPASSFIELD, new Error(ecode.auth.EPASSFIELD));
+          logger.error(ecode.auth.EPASSFIELD, { error_code: 'EPASSFIELD', form_id: req.formId });
           return next(ecode.auth.EPASSFIELD);
         }
 
         // Manually encrypt and update the password.
         router.formio.encrypt(password, async (err, hash) => {
           if (err) {
-            log(req, ecode.auth.EPASSRESET, err);
+            logger.exception(ecode.auth.EPASSRESET, err, {
+              error_code: 'EPASSRESET',
+              submission_id: submission._id,
+            });
             return next(ecode.auth.EPASSRESET);
           }
 
@@ -280,7 +278,10 @@ module.exports = (router) => {
             // The submission was saved!
             return next(null, submission);
           } catch (err) {
-            log(req, ecode.auth.EPASSRESET, err);
+            logger.exception(ecode.auth.EPASSRESET, err, {
+              error_code: 'EPASSRESET',
+              submission_id: submission._id,
+            });
             return next(ecode.auth.EPASSRESET);
           }
         });
@@ -299,7 +300,7 @@ module.exports = (router) => {
 
         // Make sure they have a username.
         if (!username) {
-          log(req, ecode.user.ENONAMEP, new Error(ecode.user.ENONAMEP));
+          logger.warning(ecode.user.ENONAMEP, { error_code: 'ENONAMEP', form_id: req.formId });
           return res.status(400).send('You must provide a username to reset your password.');
         }
 
@@ -318,7 +319,7 @@ module.exports = (router) => {
           // Look up the user.
           this.getSubmission(req, token, async (err, submission) => {
             if (err || !submission) {
-              log(req, ecode.user.ENOUSER, err);
+              logger.warning(ecode.user.ENOUSER, { error_code: 'ENOUSER', form_id: req.formId });
               return next(ecode.user.ENOUSER);
             }
 
@@ -353,11 +354,15 @@ module.exports = (router) => {
                 message: 'Password reset email was sent.',
               });
             } catch (err) {
-              log(req, ecode.emailer.ESENDMAIL, err);
+              logger.exception(ecode.emailer.ESENDMAIL, err, {
+                error_code: 'ESENDMAIL',
+                form_id: req.formId,
+                submission_id: submission._id,
+              });
             }
           });
         } catch (err) {
-          log(req, ecode.cache.EFORMLOAD, err);
+          logger.warning(ecode.cache.EFORMLOAD, err, { error_code: 'EFORMLOAD', form_id: req.formId });
           return next(err);
         }
       } else {
@@ -419,21 +424,24 @@ module.exports = (router) => {
       // Handle the request after they have come back.
       else if (hasResetToken && handler === 'before' && method === 'create') {
         if (!req.tempToken.username || !req.tempToken.form) {
-          debug(ecode.auth.ERESETTOKEN, req);
+          logger.warning(ecode.auth.ERESETTOKEN, { error_code: 'ERESETTOKEN' });
           return res.status(400).send(ecode.auth.ERESETTOKEN);
         }
 
         // Get the password
         const password = _.get(req.submission.data, this.settings.password);
         if (!password) {
-          debug(ecode.auth.ENOPASSP);
+          logger.warning(ecode.auth.ENOPASSP, { error_code: 'ENOPASSP' });
           return next(ecode.auth.ENOPASSP);
         }
 
         // Update the password.
         this.updatePassword(req, req.tempToken, password, function (err) {
           if (err) {
-            log(req, ecode.auth.EPASSRESET, new Error(ecode.auth.EPASSRESET));
+            logger.warning(ecode.auth.EPASSRESET, {
+              error_code: 'EPASSRESET',
+              reason: err.message || err,
+            });
             return res.status(400).send('Unable to update the password. Please try again.');
           }
           res.status(200).send({

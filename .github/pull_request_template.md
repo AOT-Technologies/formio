@@ -1,29 +1,37 @@
-## Link to Jira Ticket
-
-
-## Description
-
-**What changed?**
-
-_Previously, formio ... This PR replaces this behavior by ..._
-
-**Why have you chosen this solution?**
-
-_Although there were many potential solutions such as ..., [my solution] was best because ..._
-
-## Dependencies
-
-_This PR depends on the following PRs from other Form.io modules: ..._
-
-## How has this PR been tested?
-
-_I added automated tests to cover [all/the following] cases, including ..._
-
-## Checklist:
-
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation (if applicable)
-- [ ] My changes generate no new warnings
-- [ ] My changes include tests that prove my fix is effective (or that my feature works as intended)
-- [ ] New and existing unit/integration tests pass locally with my changes
-- [ ] Any dependent changes have corresponding PRs that are listed above
+## 📝 Pull Request Summary
+**Description:**
+<!-- Briefly describe the purpose of this PR and the problem it solves. -->
+**Related Jira Ticket:**  
+<!-- Ticket link like this format - https://aottech.atlassian.net/browse/FWF-5524 -->
+**DEPENDENCY PR:**  
+<!-- Dependency Ticket link like this format - https://github.com/AOT-Technologies/forms-flow-ai/pull/3012 -->
+**Type of Change:**
+- [ ] ✨ Feature
+- [ ] 🐞 Bug Fix
+- [ ] ♻️ Refactor
+- [ ] 🧹 Code Cleanup
+- [ ] 🧪 Test Addition / Update
+- [ ] 📦 Dependency / Package Updates
+- [ ] 📘 Documentation Update
+- [ ] 🚀 Deployment / Config Change / Yaml changes
+---
+## 💻 Changes 
+**Summary of Changes:**
+<!-- Describe UI/UX or logic updates. -->
+**UI/UX Review:**
+- [ ] Required
+- [ ] Not Applicable
+**Screenshots / Screen Recordings (if applicable):**
+<!-- Attach before/after screenshots or screen recordings for UI changes. -->
+## ✅ Checklist
+- [ ] Code builds successfully without lint or type errors  
+- [ ] Unit tests added or updated  
+- [ ] Documentation updated (README / Confluence / API Docs)  
+- [ ] No sensitive information (keys, passwords, secrets) committed  
+- [ ] I have updated the **CHANGELOG** with relevant details  
+- [ ] I have given a **clear and meaningful PR title and description as per standard format**  
+- [ ] I have verified **cross-repo dependencies** (if any)  
+- [ ] I have confirmed **backward compatibility** with previous releases  
+---
+## 👥 Reviewer Notes
+<!-- Optional: Add context or special instructions for reviewers. -->

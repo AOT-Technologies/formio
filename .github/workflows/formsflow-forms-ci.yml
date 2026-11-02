@@ -12,6 +12,9 @@ on:
       - develop
       - formsflow-forms 
 
+permissions:
+  contents: read
+
 defaults:
   run:
     shell: bash

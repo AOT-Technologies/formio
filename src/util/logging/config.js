@@ -2,6 +2,7 @@
 
 const _ = require('lodash');
 const path = require('path');
+const proxyaddr = require('proxy-addr');
 
 const DEFAULT_SERVICE_NAME = 'forms-flow-forms';
 const DEFAULT_FILE_NAME = 'formio.log';
@@ -107,12 +108,32 @@ function resolveConfig(env = process.env, stdout = process.stdout) {
     datePattern = ROTATION_PATTERNS.MIDNIGHT;
   }
 
+  // Proxies whose forwarded headers are believed for `ip_address`. Unset keeps the standard's
+  // header order (§3.2). Once set, invalid entries are dropped rather than trusting every header.
+  let trustedProxies = null;
+  if (env.TRUSTED_PROXIES !== undefined) {
+    trustedProxies = String(env.TRUSTED_PROXIES)
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .filter((entry) => {
+        try {
+          proxyaddr.compile(entry);
+          return true;
+        } catch (ignoreErr) {
+          warnings.push({ field: 'TRUSTED_PROXIES', value: entry, fallback: 'ignored' });
+          return false;
+        }
+      });
+  }
+
   return {
     level,
     format,
     environment,
     silent,
     service: env.SERVICE_NAME || DEFAULT_SERVICE_NAME,
+    trustedProxies,
     file: {
       enabled:
         !silent && (env.LOG_FILE_ENABLED === undefined ? true : isTrue(env.LOG_FILE_ENABLED)),

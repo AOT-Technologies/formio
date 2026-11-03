@@ -6,10 +6,14 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const cors = require('cors');
 const express = require('express');
+const proxyaddr = require('proxy-addr');
 const supertest = require('supertest');
 const request = require('./formio-supertest');
 const logging = require('../src/util/logger');
+const util = require('../src/util/util');
+const { corsOrigin } = require('../server');
 const { resolveConfig } = require('../src/util/logging/config');
 const { requestContext, errorHandler, getClientIp } = require('../src/middleware/requestContext');
 
@@ -142,6 +146,20 @@ module.exports = function (app, template) {
         assert.equal(config.file.datePattern, 'YYYY-MM-DD-HH');
       });
 
+      it('Keeps only valid TRUSTED_PROXIES entries and warns about the rest', () => {
+        assert.equal(resolveConfig({}).trustedProxies, null);
+        const config = resolveConfig({ TRUSTED_PROXIES: 'loopback, 10.0.0.0/8, bogus' });
+        assert.deepEqual(config.trustedProxies, [
+          'loopback',
+          '10.0.0.0/8',
+        ]);
+        assert.deepEqual(config.warnings, [
+          { field: 'TRUSTED_PROXIES', value: 'bogus', fallback: 'ignored' },
+        ]);
+        // Set but entirely invalid: trust no proxy rather than every header.
+        assert.deepEqual(resolveConfig({ TRUSTED_PROXIES: 'bogus' }).trustedProxies, []);
+      });
+
       it('Matches only the archives of the configured log file', () => {
         const { archivePattern } = resolveConfig({ LOG_FILE_PATH: 'out/service.log' }).file;
         [
@@ -252,6 +270,23 @@ module.exports = function (app, template) {
         ] = capture.records;
         assert.equal(record.event, 'custom_event');
         assert.equal(record.tenant_id, 'abc');
+      });
+
+      it('Uses fixed events for the legacy util.log and util.error adapters', () => {
+        util.log('Loaded 12 forms for tenant x9');
+        util.log({ forms: 12 });
+        util.error(new Error('E11000 duplicate key error collection: formio.submissions'));
+        const [
+          text,
+          object,
+          error,
+        ] = records((record) => record.logger === 'formio:util');
+        assert.equal(text.event, 'legacy_log');
+        assert.equal(text.message, 'Loaded 12 forms for tenant x9');
+        assert.equal(object.event, 'legacy_log');
+        assert.equal(error.event, 'legacy_error');
+        assert.equal(error.level, 'ERROR');
+        assert.match(error.error, /^Error: E11000 duplicate key/);
       });
 
       it('Logs stack traces for exceptions and summaries for handled errors', () => {
@@ -524,6 +559,45 @@ module.exports = function (app, template) {
         assert.equal(accessRecords(res.headers['x-request-id'])[0].event, 'http_request_finished');
       });
 
+      it('Rejects disallowed CORS origins with a 403 JSON body', async () => {
+        const corsApp = express();
+        corsApp.use(requestContext);
+        corsApp.use(
+          cors({
+            origin: corsOrigin([
+              'http://allowed.example',
+            ]),
+          }),
+        );
+        corsApp.get('/ok', (req, res) => res.json({ ok: true }));
+        corsApp.use(errorHandler);
+
+        const allowed = await supertest(corsApp)
+          .get('/ok')
+          .set('Origin', 'http://allowed.example')
+          .expect(200);
+        assert.equal(allowed.headers['access-control-allow-origin'], 'http://allowed.example');
+
+        const res = await supertest(corsApp)
+          .get('/ok')
+          .set('Origin', 'http://evil.example')
+          .set('X-Request-ID', 'cors-1')
+          .expect(403);
+        assert.deepEqual(res.body, {
+          message: 'The CORS policy for this site does not allow access from the specified Origin.',
+        });
+        assert(!('access-control-allow-origin' in res.headers));
+        const rejected = records(
+          (record) => record.event === 'http_request_rejected' && record.request_id === 'cors-1',
+        );
+        assert.equal(rejected.length, 1);
+        assert.equal(rejected[0].level, 'WARNING');
+        assert.equal(rejected[0].status_code, 403);
+        const access = accessRecords('cors-1');
+        assert.equal(access.length, 1);
+        assert.equal(access[0].status_code, 403);
+      });
+
       it('Logs failures after the response started as failed, not disconnected', async () => {
         // The handler closes the connection, so the client sees a socket hang-up.
         await supertest(testApp())
@@ -574,6 +648,32 @@ module.exports = function (app, template) {
         assert.equal(getClientIp(req({ 'x-forwarded-for': '1.2.3.4:5678' })), '1.2.3.4');
         assert.equal(getClientIp(req({ 'x-forwarded-for': '[2001:db8::1]:443' })), '2001:db8::1');
         assert.equal(getClientIp(req({ 'x-forwarded-for': '2001:db8::1' })), '2001:db8::1');
+      });
+
+      it('Believes forwarded headers only from trusted proxies when configured', () => {
+        const req = (headers, remoteAddress) => ({ headers, socket: { remoteAddress } });
+        const trust = proxyaddr.compile('10.0.0.0/8');
+        // The client sent the first entry; the trusted proxy appended the real address.
+        const spoofed = { 'x-forwarded-for': '198.51.100.1, 203.0.113.5' };
+        assert.equal(getClientIp(req(spoofed, '10.0.0.2'), trust), '203.0.113.5');
+        assert.equal(
+          getClientIp(
+            req({ 'x-forwarded-for': '198.51.100.1, 203.0.113.5, 10.0.0.9' }, '10.0.0.2'),
+            trust,
+          ),
+          '203.0.113.5',
+        );
+        // Headers from an untrusted peer are ignored.
+        assert.equal(getClientIp(req(spoofed, '192.0.2.7'), trust), '192.0.2.7');
+        assert.equal(getClientIp(req({ 'x-real-ip': '4.4.4.4' }, '10.0.0.2'), trust), '4.4.4.4');
+        assert.equal(getClientIp(req({ 'x-real-ip': '4.4.4.4' }, '192.0.2.7'), trust), '192.0.2.7');
+        // A malformed hop falls back to the peer, and an empty trust list believes no header.
+        assert.equal(
+          getClientIp(req({ 'x-forwarded-for': '<script>' }, '10.0.0.2'), trust),
+          '10.0.0.2',
+        );
+        assert.equal(getClientIp(req(spoofed, '10.0.0.2'), proxyaddr.compile([])), '10.0.0.2');
+        assert.equal(getClientIp(req(spoofed), trust), 'unknown');
       });
 
       it('Adds the request id to outbound headers inside a request', () => {
@@ -672,6 +772,8 @@ module.exports = function (app, template) {
           .set('Content-Type', 'application/json; charset=latin1')
           .send('{}')
           .expect(415);
+        assert.equal(Object.keys(res.body).length, 1);
+        assert.match(res.body.message, /unsupported charset/i);
         const requestId = res.headers['x-request-id'];
         const rejected = records(
           (record) => record.event === 'http_request_rejected' && record.request_id === requestId,
@@ -683,6 +785,17 @@ module.exports = function (app, template) {
         assert.equal(access.length, 1);
         assert.equal(access[0].event, 'http_request_finished');
         assert.equal(access[0].status_code, 415);
+      });
+
+      it('Answers malformed JSON with a 400, as before', async () => {
+        const res = await request(app)
+          .post('/form')
+          .set('Content-Type', 'application/json')
+          .send('{bad')
+          .expect(400);
+        const access = accessRecords(res.headers['x-request-id']);
+        assert.equal(access.length, 1);
+        assert.equal(access[0].status_code, 400);
       });
 
       it('Logs one access record per business request at INFO', async () => {

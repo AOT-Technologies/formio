@@ -23,14 +23,18 @@ const logger = {
 
 /**
  * Write legacy free-form content (string, Error or object) to the `formio:util` logger.
+ * The text can be dynamic (e.g. an error message), so the event is fixed instead of derived from it.
  */
 const logContent = (level, content) => {
   if (content instanceof Error) {
-    logger.util.error(content.message, content);
-  } else if (typeof content === 'string') {
-    logger.util[level](content);
+    logger.util.error(content.message, content, { event: 'legacy_error' });
+    return;
+  }
+  const event = level === 'error' ? 'legacy_error' : 'legacy_log';
+  if (typeof content === 'string') {
+    logger.util[level](content, { event });
   } else {
-    logger.util[level](level === 'error' ? 'Error event' : 'Log event', { content });
+    logger.util[level](level === 'error' ? 'Error event' : 'Log event', { event, content });
   }
 };
 

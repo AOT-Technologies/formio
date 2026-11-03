@@ -43,6 +43,24 @@ const printBanner = function () {
   });
 };
 
+/**
+ * The CORS origin check for `allowedOrigins`.
+ */
+const corsOrigin = (allowedOrigins) =>
+  function (origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.indexOf(origin) === -1 && allowedOrigins.indexOf('*') === -1) {
+      var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      // A client error: logged as a rejected request, not as an unhandled exception.
+      const err = new Error(msg);
+      err.status = 403;
+      return callback(err, false);
+    }
+    return callback(null, true);
+  };
+
 module.exports = function (options) {
   options = options || {};
   const q = Q.defer();
@@ -71,23 +89,7 @@ module.exports = function (options) {
   if (config.allowedOrigins) {
     app.use(
       cors({
-        origin: function (origin, callback) {
-          if (!origin) {
-            return callback(null, true);
-          }
-          if (
-            config.allowedOrigins.indexOf(origin) === -1 &&
-            config.allowedOrigins.indexOf('*') === -1
-          ) {
-            var msg =
-              'The CORS policy for this site does not allow access from the specified Origin.';
-            // A client error: logged as a rejected request, not as an unhandled exception.
-            const err = new Error(msg);
-            err.status = 403;
-            return callback(err, false);
-          }
-          return callback(null, true);
-        },
+        origin: corsOrigin(config.allowedOrigins),
       }),
     );
   }
@@ -156,3 +158,5 @@ module.exports = function (options) {
 
   return q.promise;
 };
+
+module.exports.corsOrigin = corsOrigin;

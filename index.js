@@ -161,6 +161,7 @@ module.exports = function (config) {
         if (err.type === 'entity.too.large') {
           return res.status(413).send({ message: 'Request payload too large' });
         }
+        // Other parser errors (e.g. 415 unsupported charset) are answered by the final error handler.
         next(err);
       });
 

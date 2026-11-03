@@ -2,9 +2,14 @@
 
 const crypto = require('crypto');
 const net = require('net');
+const proxyaddr = require('proxy-addr');
 const logging = require('../util/logger');
 
 const { context } = logging;
+// Set by TRUSTED_PROXIES; null keeps the logging standard's header order (§3.2).
+const trustedProxies = logging.config.trustedProxies
+  ? proxyaddr.compile(logging.config.trustedProxies)
+  : null;
 const accessLogger = logging.getLogger('formio:access');
 const errorLogger = logging.getLogger('formio:error');
 
@@ -31,8 +36,18 @@ const parseIp = (value) => {
 /**
  * Resolve the client IP: X-Forwarded-For (first entry), X-Real-IP, then the socket address.
  * Header values are used only when they are valid IP addresses.
+ *
+ * With trusted proxies, X-Forwarded-For is walked from the socket peer and the nearest untrusted
+ * hop wins, so a client cannot choose its own address; X-Real-IP counts only from a trusted peer.
  */
-const getClientIp = (req) => {
+const getClientIp = (req, trust = trustedProxies) => {
+  const peer = req.socket && req.socket.remoteAddress;
+  if (trust) {
+    if (!req.headers['x-forwarded-for'] && peer && trust(peer, 0)) {
+      return parseIp(req.headers['x-real-ip']) || peer;
+    }
+    return parseIp(proxyaddr(req, trust)) || peer || 'unknown';
+  }
   const forwarded = req.headers['x-forwarded-for'];
   const first = forwarded && parseIp(String(forwarded).split(',')[0]);
   if (first) {
@@ -42,7 +57,7 @@ const getClientIp = (req) => {
   if (realIp) {
     return realIp;
   }
-  return (req.socket && req.socket.remoteAddress) || 'unknown';
+  return peer || 'unknown';
 };
 
 const getRequestId = (req) => {

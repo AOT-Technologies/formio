@@ -24,7 +24,11 @@
 #   - Only GITHUB_TOKEN is used. Dependabot-triggered runs cannot read normal
 #     Actions secrets, so do not add any here.
 #   - No checkout of PR code happens in this workflow, so `pull_request` is
-#     safe and the `permissions` block grants the write scopes we need.
+#     safe. Permissions are declared per job with only the scopes that job
+#     needs (SonarCloud S8233); auto-merge is its own job because it is the
+#     only path that needs `contents: write`.
+#   - Actions are pinned to a commit SHA with a version comment (S7637); the
+#     github-actions ecosystem in .github/dependabot.yml keeps them current.
 #   - `workflow_dispatch` lets you bootstrap the labels before the first
 #     Dependabot run (Actions → Dependabot Triage → Run workflow).
 # =============================================================================
@@ -34,11 +38,6 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
-
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
 
 concurrency:
   group: dependabot-triage-${{ github.event.pull_request.number || 'bootstrap' }}
@@ -66,6 +65,9 @@ jobs:
   bootstrap-labels:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # labels are an issues-scoped resource
     steps:
       - name: Ensure tier labels exist
         env:
@@ -73,13 +75,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          ensure() { # name color description
-            if gh label list --limit 200 --json name --jq '.[].name' | grep -Fxq "$1"; then
-              gh label edit "$1" --color "$2" --description "$3" >/dev/null
-              echo "updated: $1"
+          ensure() {
+            local name="$1" color="$2" description="$3"
+            if gh label list --limit 200 --json name --jq '.[].name' | grep -Fxq "$name"; then
+              gh label edit "$name" --color "$color" --description "$description" >/dev/null
+              echo "updated: $name"
             else
-              gh label create "$1" --color "$2" --description "$3" >/dev/null
-              echo "created: $1"
+              gh label create "$name" --color "$color" --description "$description" >/dev/null
+              echo "created: $name"
             fi
           }
           ensure "$LABEL_PATCH"    "0E8A16" "Grouped patch-only Dependabot PR. One review pass, then merge."
@@ -95,10 +98,16 @@ jobs:
   triage:
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write # create labels, post the sticky comment
+      pull-requests: write # label and retitle the PR
+    outputs:
+      tier: ${{ steps.tier.outputs.tier }}
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ github.token }}
 
@@ -137,8 +146,10 @@ jobs:
           set -euo pipefail
           existing=$(gh label list --limit 200 --json name --jq '.[].name')
           ensure() {
-            if ! grep -Fxq "$1" <<<"$existing"; then
-              gh label create "$1" --color "$2" --description "$3" >/dev/null && echo "created: $1"
+            local name="$1" color="$2" description="$3"
+            if ! grep -Fxq "$name" <<<"$existing"; then
+              gh label create "$name" --color "$color" --description "$description" >/dev/null
+              echo "created: $name"
             fi
           }
           ensure "$LABEL_PATCH"    "0E8A16" "Grouped patch-only Dependabot PR. One review pass, then merge."
@@ -209,6 +220,9 @@ jobs:
             security)
               badge="![security](https://img.shields.io/badge/dependabot-security%20%F0%9F%94%92-5319E7)"
               checklist=$'- [ ] Confirm the advisory applies to our usage\n- [ ] CI green\n- [ ] Merge promptly; this takes priority over version-update PRs' ;;
+            *)
+              echo "unexpected tier: '$TIER'" >&2
+              exit 1 ;;
           esac
           body=$(cat <<MD
           $marker
@@ -240,8 +254,24 @@ jobs:
             echo "sticky comment created"
           fi
 
-      - name: Enable auto-merge for the patch group (opt-in)
-        if: steps.tier.outputs.tier == 'patch' && vars.DEPENDABOT_AUTOMERGE_PATCH == 'true'
+  # ---------------------------------------------------------------------------
+  # Opt-in auto-merge for the patch group. Separate job so `contents: write`
+  # is granted only on this path (S8233). Nothing merges until the repository
+  # variable DEPENDABOT_AUTOMERGE_PATCH is "true".
+  # ---------------------------------------------------------------------------
+  automerge-patch:
+    needs: triage
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      needs.triage.outputs.tier == 'patch' &&
+      vars.DEPENDABOT_AUTOMERGE_PATCH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # enablePullRequestAutoMerge requires it
+      pull-requests: write
+    steps:
+      - name: Enable auto-merge for the patch group (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -249,5 +279,9 @@ jobs:
         run: |
           set -euo pipefail
           # Requires: repo setting "Allow auto-merge" ON and branch protection with required checks on develop.
+          if [[ "$(gh pr view "$PR" --json autoMergeRequest --jq '.autoMergeRequest != null')" == "true" ]]; then
+            echo "auto-merge already enabled"
+            exit 0
+          fi
           gh pr merge "$PR" --auto --merge
           echo "auto-merge enabled; PR merges when required checks pass"

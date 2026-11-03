@@ -225,6 +225,36 @@ module.exports = function (app, template) {
         ]);
         assert(!JSON.stringify(record).includes('secret'));
       });
+
+      it('Escapes line breaks in console output', () => {
+        const record = logging.buildRecord('info', 'formio:test', 'Form cache hit', [
+          { form_id: 'abc\r\n2026-01-01T00:00:00.000Z INFO    [formio:test] forged' },
+        ]);
+        record.level = 'INFO';
+        const line = logging.consoleFormat.transform(record)[Symbol.for('message')];
+        assert(!/[\r\n]/.test(line), 'Console output must stay on one line');
+        assert(line.includes('form_id=abc\\r\\n2026'));
+      });
+
+      it('Reports transport failures on stderr instead of exiting', () => {
+        const failing = logging.addCaptureTransport();
+        const write = process.stderr.write;
+        const lines = [];
+        process.stderr.write = (chunk) => lines.push(String(chunk)) > 0;
+        try {
+          const err = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+          failing.emit('error', err);
+        } finally {
+          process.stderr.write = write;
+          logging.removeCaptureTransport(failing);
+        }
+        assert.equal(lines.length, 1);
+        const record = JSON.parse(lines[0]);
+        assert.equal(record.level, 'ERROR');
+        assert.equal(record.logger, 'formio:logging');
+        assert.equal(record.event, 'logging_transport_failed');
+        assert.equal(record.error, 'Error: ENOSPC: no space left on device');
+      });
     });
 
     describe('Redaction', () => {
@@ -258,9 +288,19 @@ module.exports = function (app, template) {
           record,
         ] = capture.records;
         assert.equal(record.message, 'Token [REDACTED_JWT] received');
+        assert.equal(record.event, 'token_redacted_jwt_received');
         assert.equal(record.header, 'Bearer [REDACTED]');
         assert.equal(record.url, 'https://host/cb?code=[REDACTED]&state=1&access_token=[REDACTED]');
         assert.equal(record.mongo, 'mongodb://user:[REDACTED]@db:27017/formio');
+      });
+
+      it('Derives automatic events from the redacted text', () => {
+        logging('formio:test').warning(new Error('connect mongodb://user:pa55word@db/formio failed'));
+        const [
+          record,
+        ] = capture.records;
+        assert.equal(record.event, 'connect_mongodb_user_redacted_db_formio_failed');
+        assert(!JSON.stringify(record).includes('pa55word'));
       });
 
       it('Truncates deep nesting and large strings', () => {
@@ -486,6 +526,62 @@ module.exports = function (app, template) {
                 .send({ data: { name: 'Logging' } })
                 .end((err) => err && finish(err));
             });
+        });
+      });
+
+      it('Logs webhook failures without the URL or response', function (done) {
+        if (process.env.DOCKER) {
+          return this.skip();
+        }
+        const Helper = require('./helper')(app);
+        const helper = new Helper(template.users.admin, template);
+        // Reserve a port, then close it so the webhook is refused.
+        const server = http.createServer();
+        server.listen(0, () => {
+          const port = server.address().port;
+          server.close(() => {
+            const formName = `logwebhookfail${Date.now()}`;
+            helper
+              .form(formName, [
+                { type: 'textfield', key: 'name', label: 'Name', input: true },
+              ])
+              .action({
+                title: 'Webhook',
+                name: 'webhook',
+                handler: [
+                  'after',
+                ],
+                method: [
+                  'create',
+                ],
+                priority: 1,
+                settings: { url: `http://localhost:${port}/hook?name={{name}}`, block: true },
+              })
+              .execute((err) => {
+                if (err) {
+                  return done(err);
+                }
+                request(app)
+                  .post(`/form/${template.forms[formName]._id}/submission`)
+                  .set('x-jwt-token', helper.owner.token)
+                  .send({ data: { name: 'Sensitive' } })
+                  .end(() => {
+                    try {
+                      const [
+                        failure,
+                      ] = records((record) => record.event === 'webhook_request_failed');
+                      assert(failure, 'Missing webhook failure record');
+                      assert.equal(failure.level, 'WARNING');
+                      assert.equal(failure.error_code, 'ECONNREFUSED');
+                      assert(!('reason' in failure));
+                      assert(!JSON.stringify(failure).includes('Sensitive'));
+                      done();
+                    } catch (err) {
+                      done(err);
+                    }
+                  });
+              });
+          });
         });
       });
     });

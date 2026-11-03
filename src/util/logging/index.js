@@ -150,7 +150,7 @@ const buildRecord = (level, name, rawMessage, args, store) => {
   const contextFields = context.getContextFields(
     store || context.getStore() || context.fromRequest(req),
   );
-  const text = message || (error && error.message) || event || 'Log event';
+  const text = redact.sanitizeValue(message || (error && error.message) || event || 'Log event');
 
   const record = {
     timestamp: new Date().toISOString(),
@@ -171,9 +171,7 @@ const buildRecord = (level, name, rawMessage, args, store) => {
   record.message = text;
 
   // Explicit tenant_id / ip_address passed by the caller override the context defaults.
-  return Object.assign(record, redact.sanitizeFields(caller), {
-    message: redact.sanitizeValue(text),
-  });
+  return Object.assign(record, redact.sanitizeFields(caller));
 };
 
 // Formats.
@@ -203,7 +201,10 @@ const consoleFormat = format.printf((info) => {
     });
   const line = `${info.timestamp} ${info.level.padEnd(7)} [${info.logger}] ${info.message}`;
   const details = extras.length ? ` ${extras.join(' ')}` : '';
-  return `${line}${details}${info.exception ? `\n${info.exception}` : ''}`;
+  // Escape line breaks so values (e.g. ids from the URL) cannot forge console lines; only the
+  // stack trace keeps its own lines.
+  const text = `${line}${details}`.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+  return `${text}${info.exception ? `\n${info.exception}` : ''}`;
 });
 
 const consoleTransport = new transports.Console({
@@ -220,6 +221,18 @@ const root = createLogger({
     consoleTransport,
   ],
   exitOnError: false,
+});
+
+// Transport failures (e.g. a full log volume) are re-emitted on the logger; without a listener
+// they become uncaught exceptions that exit the process. The failing transport cannot carry the
+// record, so report it on stderr.
+root.on('error', (err, transport) => {
+  const record = buildRecord('error', 'formio:logging', 'Logging transport failed', [
+    err,
+    { event: 'logging_transport_failed', transport: transport && transport.name },
+  ]);
+  record.level = 'ERROR';
+  process.stderr.write(`${JSON.stringify(record)}\n`);
 });
 
 /**
@@ -402,6 +415,7 @@ module.exports = {
   maskEmail: redact.maskEmail,
   snakeCase,
   buildRecord,
+  consoleFormat,
   getLogger,
   flush,
   addCaptureTransport,

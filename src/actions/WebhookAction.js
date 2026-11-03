@@ -144,12 +144,13 @@ module.exports = function (router) {
       const handleError = (data, response) => {
         setActionItemMessage('Webhook failed', response);
         const message = data ? data.message || data : response.statusMessage;
-        // Only log a string reason; an object here is the remote response body.
+        // Identifiers only: fetch errors embed the interpolated URL and response bodies can echo
+        // submission data.
         logger.warning('Webhook request failed', {
           form_id: req.formId,
           action_title: this.title,
           status_code: _.get(response, 'status'),
-          reason: _.isString(message) ? message : _.get(response, 'statusMessage'),
+          error_code: data instanceof Error ? data.code || data.type || data.name : undefined,
         });
 
         if (!_.get(settings, 'block') || _.get(settings, 'block') === false) {

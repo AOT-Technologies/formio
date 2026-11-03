@@ -1,0 +1,231 @@
+# =============================================================================
+# Dependabot configuration — formio (AOT-Technologies fork, formsflow-forms)
+# -----------------------------------------------------------------------------
+# Review tiers (see .github/DEPENDABOT.md and .github/workflows/dependabot-triage.yml)
+#
+#   patch-only-safe  ONE grouped PR across all npm directories, patch bumps only.
+#                    Title: "Bump the patch-only-safe group across N directories
+#                    with M updates" → badge [✅ PATCH-ONLY]. One review pass, merge.
+#   minor / major    Individual PRs (one per dependency per directory) → badges
+#                    [🟡 MINOR] / [🔴 MAJOR]. Reviewed deliberately.
+#   security-fixes   ONE grouped PR for Dependabot security updates →
+#                    badge [🔒 SECURITY]. Always on the default branch.
+#
+# Repo facts this file encodes:
+#   - 2 npm directories, installed independently (own package-lock.json each):
+#       /        the formsflow-forms API server (Express + Mongoose + @formio/*)
+#       /portal  the upstream "oss-portal" React app. It has NO CI job and is
+#                not built into the Docker image, so Dependabot PRs that only
+#                touch /portal are validated by nothing but the lockfile diff.
+#   - This repo is a fork of formio/formio. The form engine (@formio/*,
+#     formiojs, formio-workers, resourcejs) and the server framework (express,
+#     mongoose, mongodb) follow the upstream project; their majors are ignored
+#     below so they arrive via an upstream sync, not as a Dependabot PR. React
+#     and the build tooling majors are frozen with the standard formsflow list.
+#     There is no CLAUDE.md or policy doc in this repo, so the ignore list is a
+#     proposal (FWF-6827); lift an ignore when an upgrade is planned.
+#   - Docker: the base image is pinned to an exact Node tag on purpose
+#     (node:24.22.1-alpine, FWF-6795). Patch bumps are grouped; a Node minor or
+#     major arrives as its own PR. openshift_custom_Dockerfile (node:12) is a
+#     legacy reference file and will raise one [🔴 MAJOR] PR; ignore or delete it.
+#   - docker-compose.yml pins mongo:5.0 for local development; a Mongo major is a
+#     platform decision and arrives as an individual PR.
+#   - Default branch is `develop`; no target-branch is set on purpose, because
+#     security updates only ever target the default branch and a non-default
+#     target-branch silently detaches the groups/labels from them.
+#   - The repo already receives grouped security PRs ("Bump the npm_and_yarn
+#     group across 2 directories with 23 updates"); the security-fixes group
+#     below keeps that behaviour and gives those PRs the [🔒 SECURITY] tier.
+#
+# Manual refresh: Insights → Dependency graph → Dependabot → "Check for updates".
+# Validation:     Insights → Dependency graph → Dependabot (shows config errors).
+# =============================================================================
+version: 2
+
+updates:
+  # ===========================================================================
+  # npm — API server (/) + portal (/portal), in ONE update job so the patch
+  # group spans both directories ("across 2 directories").
+  # ===========================================================================
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/portal"
+
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+      timezone: "Asia/Kolkata"
+
+    # Grouped patch PR + individual minor/major PRs can exceed the default of 5.
+    open-pull-requests-limit: 10
+
+    # Bump the range in package.json AND the lockfile (app behaviour). Without
+    # this Dependabot may treat non-private packages as libraries and "widen"
+    # ranges instead of bumping them.
+    versioning-strategy: "increase"
+
+    # Supply-chain cooldown: never take a release the day it is published.
+    # Most malicious npm publishes are yanked within days; waiting costs little.
+    cooldown:
+      default-days: 7
+      semver-patch-days: 7
+      semver-minor-days: 14
+      semver-major-days: 30
+
+    # Labels must already exist in the repo (unknown labels are ignored).
+    # Tier labels are added by dependabot-triage.yml, not here.
+    labels:
+      - "dependencies"
+      - "javascript"
+
+    # Branch names: dependabot/npm_and_yarn/<group-or-dep>-<hash>
+    pull-request-branch-name:
+      separator: "/"
+
+    groups:
+      # ---- ONE PR for every patch-level bump across all directories ----------
+      patch-only-safe:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+
+      # ---- ONE PR for security fixes (overrides the repo-level
+      #      "grouped security updates" toggle; keeps them out of the patch PR)
+      security-fixes:
+        applies-to: "security-updates"
+        patterns:
+          - "*"
+
+      # Minor and major bumps match no version-update group on purpose, so
+      # Dependabot raises them as individual pull requests.
+      #
+      # Optional (undocumented combination — test on a branch before relying
+      # on it): collapse "same dependency, N directories" minor bumps into one PR:
+      #
+      #   minor-per-dependency:
+      #     applies-to: "version-updates"
+      #     update-types: ["minor"]
+      #     group-by: "dependency-name"
+
+    ignore:
+      # ---- Proposal (FWF-6827): standard formsflow freeze list, limited to the
+      #      dependencies this repo actually declares. No policy doc exists here.
+      # React (portal only): patch only. Portal pins React 18; a minor/major is
+      # a deliberate upgrade of the whole portal, not a weekly bump.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+      # Build system / bundler / tooling: majors are a planned project.
+      - dependency-name: "webpack"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "webpack-cli"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-plugin-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "prettier"
+        update-types: ["version-update:semver-major"]
+
+      # ---- Proposal (FWF-6827): fork-tracked engine and framework ------------
+      # These versions are decided by upstream formio/formio. Take their majors
+      # through an upstream sync (see formsflow-forms-ChangeLog.md, "formio
+      # version upgraded"), not through a Dependabot PR.
+      - dependency-name: "@formio/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "formiojs"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "formio-workers"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "resourcejs"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mongoose"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mongodb"
+        update-types: ["version-update:semver-major"]
+
+  # ===========================================================================
+  # Docker — base images of /Dockerfile (node:24.22.1-alpine, pinned exact per
+  # FWF-6795) and /openshift_custom_Dockerfile (legacy, node:12).
+  # Patch bumps grouped; minor/major (e.g. node 24 → 26) come individually
+  # because they change the build image and need a deliberate decision.
+  # ===========================================================================
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:30"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-patch-only-safe:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+
+  # ===========================================================================
+  # Docker Compose — /docker-compose.yml (local dev stack, mongo:5.0).
+  # Nothing is ignored: a Mongo major arrives as one [🔴 MAJOR] PR and is a
+  # platform decision (CI also runs mongo:5 as a service container).
+  # ===========================================================================
+  - package-ecosystem: "docker-compose"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "10:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-compose-patch-only-safe:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+
+  # ===========================================================================
+  # GitHub Actions — SHA pins in .github/workflows (checkout, setup-node, ...).
+  # One PR for everything; action bumps are low-risk and CI validates them.
+  # qodo-ai/pr-agent@main is a branch ref and is never bumped by Dependabot.
+  # ===========================================================================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "10:30"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    groups:
+      github-actions-all:
+        applies-to: "version-updates"
+        patterns:
+          - "*"

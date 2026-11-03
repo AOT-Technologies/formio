@@ -1,7 +1,6 @@
 'use strict';
 
 const _ = require('lodash');
-const debug = require('debug')('formio:models:form');
 const logger = require('../util/logger')('formio:models:form');
 const { Utils: CoreUtils } = require('@formio/core');
 
@@ -93,8 +92,7 @@ module.exports = (formio) => {
         const result = await formio.mongoose.model('form').findOne(search).lean().exec();
         return !result;
       } catch (err) {
-        debug(err);
-        logger.error(err);
+        logger.exception('Failed to check form property uniqueness', err, { property });
         return false;
       }
     };

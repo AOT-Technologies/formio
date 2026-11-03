@@ -2,12 +2,7 @@
 
 const _ = require('lodash');
 const util = require('../util/util');
-const debug = {
-  error: (...args) => {
-    require('debug')('formio:error')(...args);
-    require('../util/logger')('formio:error').error(...args);
-  },
-};
+const logger = require('./logger')('formio:swagger');
 
 module.exports = async function (req, router, cb) {
   const hook = require('./hook')(router.formio);
@@ -224,7 +219,7 @@ module.exports = async function (req, router, cb) {
     try {
       swagger = router.formio.resources.submission.swagger.call(resource, true);
     } catch (err) {
-      debug.error(err);
+      logger.exception('Failed to generate submission swagger', err, { form_id: form._id });
     }
 
     // Override the body definition.

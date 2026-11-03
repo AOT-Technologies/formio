@@ -2,6 +2,7 @@
 
 let async = require('async');
 let _ = require('lodash');
+const logger = require('../../util/logger')('formio:update:3.0.4');
 
 /**
  * Update 3.0.4
@@ -44,7 +45,7 @@ module.exports = function (db, config, tools, done) {
             else if (count === 1) {
               return callback();
             } else {
-              console.log('Unknown count of the default role: ' + count);
+              logger.warning('Unexpected count of the default role', { count });
               return callback();
             }
           })
@@ -73,7 +74,7 @@ module.exports = function (db, config, tools, done) {
             else if (count === 1) {
               return callback();
             } else {
-              console.log('Unknown count of the admin role: ' + count);
+              logger.warning('Unexpected count of the admin role', { count });
               return callback();
             }
           })

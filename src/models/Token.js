@@ -1,5 +1,7 @@
 'use strict';
 
+const logger = require('../util/logger')('formio:models:token');
+
 module.exports = (formio) => {
   // Include the hook system.
   const hook = require('../util/hook')(formio);
@@ -58,7 +60,7 @@ module.exports = (formio) => {
   try {
     TokenSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
   } catch (err) {
-    console.log(err.message);
+    logger.warning('Failed to create token expiry index', err);
   }
 
   const model = require('./BaseModel')({

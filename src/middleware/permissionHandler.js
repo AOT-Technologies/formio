@@ -3,6 +3,7 @@
 const util = require('../util/util');
 const async = require('async');
 const _ = require('lodash');
+const logger = require('../util/logger')('formio:middleware:permissionHandler');
 const EVERYONE = '000000000000000000000000';
 
 module.exports = function (router) {
@@ -644,9 +645,8 @@ module.exports = function (router) {
         search = methods.PUT;
       }
       if (!search || typeof search === 'undefined') {
-        router.formio.util.error({
-          method: req.method,
-          _method: method,
+        logger.warning('Unsupported request method for permission check', {
+          permission_method: method,
         });
       }
 

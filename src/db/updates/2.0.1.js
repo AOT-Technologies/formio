@@ -2,6 +2,7 @@
 
 let _ = require('lodash');
 let async = require('async');
+const logger = require('../../util/logger')('formio:update:2.0.1');
 
 /**
  * Update 2.0.1
@@ -56,7 +57,7 @@ module.exports = function (db, config, tools, done) {
            */
           let calculateAccess = function (next) {
             if (!project.access) {
-              console.log('No project.access found for: ' + project._id);
+              logger.warning('No project access found', { project_id: project._id });
               return next();
             }
 

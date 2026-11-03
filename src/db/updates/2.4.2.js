@@ -2,6 +2,7 @@
 
 let async = require('async');
 let _ = require('lodash');
+const logger = require('../../util/logger')('formio:update:2.4.2');
 
 /**
  * Update 2.4.2
@@ -61,7 +62,7 @@ module.exports = function (db, config, tools, done) {
           roles
             .insertOne(doc)
             .then((insertionResult) => {
-              console.log('Making Admin role for project: ' + project._id);
+              logger.info('Making Admin role for project', { project_id: project._id });
               if (!insertionResult.acknowledged || !insertionResult.insertedId) {
                 return callback('Failed to create Admin role for project: ' + project._id);
               }
@@ -190,7 +191,7 @@ module.exports = function (db, config, tools, done) {
       // Remove keys for layout components.
       if (element.hasOwnProperty('input') && element.input === false) {
         if (element.hasOwnProperty('key')) {
-          console.log('Clearing key of non-input field for form: ' + _id);
+          logger.debug('Clearing key of non-input field', { form_id: _id });
           delete element.key;
         }
       }
@@ -220,14 +221,11 @@ module.exports = function (db, config, tools, done) {
         // Add the key change if this element is a input component and the keys match.
         if (element.hasOwnProperty('input') && element.input === true) {
           if (element.hasOwnProperty('key') && element.key === change._old) {
-            console.log(
-              'Found old form (' +
-                form._id +
-                ') component key "' +
-                change._old +
-                '" and updating => ' +
-                change._new,
-            );
+            logger.debug('Updating old form component key', {
+              form_id: form._id,
+              old_key: change._old,
+              new_key: change._new,
+            });
             element.key = change._new;
             change._done = true;
             break;
@@ -257,7 +255,7 @@ module.exports = function (db, config, tools, done) {
     forms
       .updateOne({ _id: form._id }, { $set: { components: form.components } })
       .then(() => {
-        console.log('Updating the form components for the form: ' + form._id);
+        logger.debug('Updated form components', { form_id: form._id });
         then();
       })
       .catch((err) => then(err));

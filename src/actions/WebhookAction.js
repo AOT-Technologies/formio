@@ -7,6 +7,9 @@ const logging = require('../util/logger');
 
 const logger = logging('formio:action:webhook');
 
+// Fetch error messages embed the request URL, which can be interpolated from submission data.
+const URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
+
 module.exports = function (router) {
   const Action = router.formio.Action;
   const hook = router.formio.hook;
@@ -143,7 +146,11 @@ module.exports = function (router) {
        */
       const handleError = (data, response) => {
         setActionItemMessage('Webhook failed', response);
-        const message = data ? data.message || data : response.statusMessage;
+        let message = data ? data.message || data : response.statusMessage;
+        if (data instanceof Error) {
+          // This message reaches the client and the actions failure log.
+          message = String(data.message || data).replace(URL_PATTERN, '[URL]');
+        }
         // Identifiers only: fetch errors embed the interpolated URL and response bodies can echo
         // submission data.
         logger.warning('Webhook request failed', {

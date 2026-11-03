@@ -1,5 +1,6 @@
 'use strict';
 
+const _ = require('lodash');
 const path = require('path');
 
 const DEFAULT_SERVICE_NAME = 'forms-flow-forms';
@@ -118,6 +119,12 @@ function resolveConfig(env = process.env, stdout = process.stdout) {
       dirname: parsedPath.dir || '.',
       filename: `${parsedPath.name}-%DATE%${parsedPath.ext}`,
       archiveDirname: path.join(parsedPath.dir || '.', 'archived'),
+      // Archives of this log file, so cleanup never touches other files sharing the archive folder.
+      // Captures the date and the size chunk (`.1`, `.2`, …) to order them.
+      archivePattern: new RegExp(
+        `^${_.escapeRegExp(parsedPath.name)}-(\\d{4}-\\d{2}-\\d{2}(?:-\\d{2})?)` +
+          `${_.escapeRegExp(parsedPath.ext)}(?:\\.(\\d+))?\\.gz$`,
+      ),
       maxBytes: toInt(env.LOG_FILE_MAX_BYTES, DEFAULT_MAX_BYTES),
       backupCount: toInt(env.LOG_FILE_BACKUP_COUNT, DEFAULT_BACKUP_COUNT),
       datePattern,

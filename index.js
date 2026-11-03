@@ -13,6 +13,12 @@ const logging = require('./src/util/logger');
 const { bindRequestContext } = require('./src/middleware/requestContext');
 const logger = logging('formio:log');
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
+// Per-request bookkeeping from router.formio.log; logged at DEBUG to keep INFO for the access log.
+const ROUTINE_LOG_EVENTS = new Set([
+  'Token',
+  'User',
+  'Action',
+]);
 const { registerEvaluator } = require('@formio/core');
 
 const util = require('./src/util/util');
@@ -28,6 +34,16 @@ router.formio.mongoose = mongoose;
 
 // Use custom template delimiters.
 _.templateSettings.interpolate = /{{([\s\S]+?)}}/g;
+
+/**
+ * Mask a string audit detail (usually a user name): u***@example.com for emails, u*** otherwise.
+ */
+const maskAuditDetail = (item) => {
+  if (typeof item !== 'string' || !item) {
+    return item;
+  }
+  return EMAIL_PATTERN.test(item) ? logging.maskEmail(item) : `${item.charAt(0)}***`;
+};
 
 // Allow custom configurations passed to the Form.IO server.
 module.exports = function (config) {
@@ -51,7 +67,8 @@ module.exports = function (config) {
     if (result) {
       const messages = info.filter((item) => typeof item === 'string');
       const details = info.filter((item) => typeof item !== 'string');
-      logger.info(
+      logger.log(
+        ROUTINE_LOG_EVENTS.has(event) ? 'debug' : 'info',
         messages.length ? messages.join(' ') : String(event),
         { event: logging.snakeCase(event) },
         req,
@@ -65,10 +82,8 @@ module.exports = function (config) {
       const result = router.formio.hook.alter('audit', info, event, req);
 
       if (result) {
-        // Audit details may carry user names; mask anything that looks like an email.
-        const details = [].concat(result).map((item) =>
-          typeof item === 'string' && EMAIL_PATTERN.test(item) ? logging.maskEmail(item) : item,
-        );
+        // Audit details may carry user names (or a password typed into the user name field).
+        const details = [].concat(result).map(maskAuditDetail);
         logger.info('Audit event', { event: logging.snakeCase(event), audit: true, details }, req);
       }
     }

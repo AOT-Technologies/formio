@@ -2,7 +2,10 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
 const http = require('http');
+const os = require('os');
+const path = require('path');
 const express = require('express');
 const supertest = require('supertest');
 const request = require('./formio-supertest');
@@ -69,6 +72,11 @@ module.exports = function (app, template) {
         err.status = 403;
         next(err);
       });
+      // Fails after the response started, like a streamed export whose cursor errors.
+      testApp.get('/stream-fail', (req, res, next) => {
+        res.write('partial');
+        next(new Error('Cursor failed'));
+      });
       testApp.use(errorHandler);
       return testApp;
     };
@@ -132,6 +140,54 @@ module.exports = function (app, template) {
         assert.equal(config.file.maxBytes, 0);
         assert.equal(config.file.backupCount, 5);
         assert.equal(config.file.datePattern, 'YYYY-MM-DD-HH');
+      });
+
+      it('Matches only the archives of the configured log file', () => {
+        const { archivePattern } = resolveConfig({ LOG_FILE_PATH: 'out/service.log' }).file;
+        [
+          'service-2026-11-03.log.gz',
+          'service-2026-11-03-05.log.1.gz',
+        ].forEach((name) => assert(archivePattern.test(name), name));
+        [
+          'service-2026-11-03.log',
+          'formio-2026-11-03.log.gz',
+          'service-a-2026-11-03.log.gz',
+          'README',
+        ].forEach((name) => assert(!archivePattern.test(name), name));
+      });
+
+      it('Caps only its own archives in a shared archive folder', async () => {
+        const dirname = fs.mkdtempSync(path.join(os.tmpdir(), 'formio-logs-'));
+        try {
+          const { archiveDirname, archivePattern } = resolveConfig({
+            LOG_FILE_PATH: path.join(dirname, 'formio.log'),
+          }).file;
+          fs.mkdirSync(archiveDirname);
+          [
+            'formio-2026-11-01.log.gz',
+            'formio-2026-11-02.log.gz',
+            'formio-2026-11-02.log.1.gz',
+            'formio-2026-11-02.log.2.gz',
+            'formio-a-2026-10-01.log.gz',
+            'other-2026-10-01.log.gz',
+            'README',
+          ].forEach((name) => fs.writeFileSync(path.join(archiveDirname, name), ''));
+          const rotated = path.join(dirname, 'formio-2026-11-03.log.gz');
+          fs.writeFileSync(rotated, '');
+
+          await logging.archiveFile(rotated, { archiveDirname, backupCount: 2, archivePattern });
+
+          // Keeps the two newest by date and chunk, not by name (`.log.gz` is the oldest chunk).
+          assert.deepEqual(fs.readdirSync(archiveDirname).sort(), [
+            'README',
+            'formio-2026-11-02.log.2.gz',
+            'formio-2026-11-03.log.gz',
+            'formio-a-2026-10-01.log.gz',
+            'other-2026-10-01.log.gz',
+          ]);
+        } finally {
+          fs.rmSync(dirname, { recursive: true, force: true });
+        }
       });
 
       it('Is silent under the test suite unless LOG_LEVEL is set', () => {
@@ -277,6 +333,52 @@ module.exports = function (app, template) {
         assert.equal(record.list[0].apiKey, '[REDACTED]');
       });
 
+      it('Redacts camelCase and upper-case key variants', () => {
+        logging('formio:test').info('Keys', {
+          privateKey: 'k1',
+          PRIVATEKEY: 'k2',
+          'private-key': 'k3',
+          clientSecret: 's',
+        });
+        const [
+          record,
+        ] = capture.records;
+        assert.equal(record.privateKey, '[REDACTED]');
+        assert.equal(record.PRIVATEKEY, '[REDACTED]');
+        assert.equal(record['private-key'], '[REDACTED]');
+        assert.equal(record.clientSecret, '[REDACTED]');
+      });
+
+      it('Masks emails in free text', () => {
+        logging('formio:test').warning(
+          'Send failed',
+          new Error('550 5.1.1 <jane@example.org>: Recipient address rejected'),
+          { recipient: logging.maskEmail('john@example.org') },
+        );
+        const [
+          record,
+        ] = capture.records;
+        assert.equal(
+          record.error,
+          'Error: 550 5.1.1 <j***@example.org>: Recipient address rejected',
+        );
+        assert.equal(record.recipient, 'j***@example.org');
+        assert(!JSON.stringify(record).includes('jane@'));
+      });
+
+      it('Logs shared references in full and only cycles as [CIRCULAR]', () => {
+        const shared = { v: 1 };
+        const loop = { name: 'loop' };
+        loop.self = loop;
+        logging('formio:test').info('References', { a: shared, b: shared, loop });
+        const [
+          record,
+        ] = capture.records;
+        assert.deepEqual(record.a, { v: 1 });
+        assert.deepEqual(record.b, { v: 1 });
+        assert.equal(record.loop.self, '[CIRCULAR]');
+      });
+
       it('Redacts JWTs, auth headers, query secrets and URL credentials in values', () => {
         const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl';
         logging('formio:test').info(`Token ${jwt} received`, {
@@ -360,6 +462,15 @@ module.exports = function (app, template) {
         assert.equal(typeof access[0].duration_ms, 'number');
       });
 
+      it('Redacts secrets in the request path, including unmatched routes', async () => {
+        const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl';
+        const res = await supertest(testApp()).get(`/files/${jwt}`).expect(404);
+        const access = accessRecords(res.headers['x-request-id']);
+        assert.equal(access.length, 1);
+        assert.equal(access[0].http_path, '/files/[REDACTED_JWT]');
+        assert(!JSON.stringify(access).includes(jwt));
+      });
+
       it('Logs health endpoints at DEBUG and similar paths at INFO', async () => {
         const health = await supertest(testApp()).get('/health').expect(200);
         const report = await supertest(testApp()).get('/health-report').expect(200);
@@ -413,6 +524,28 @@ module.exports = function (app, template) {
         assert.equal(accessRecords(res.headers['x-request-id'])[0].event, 'http_request_finished');
       });
 
+      it('Logs failures after the response started as failed, not disconnected', async () => {
+        // The handler closes the connection, so the client sees a socket hang-up.
+        await supertest(testApp())
+          .get('/stream-fail')
+          .set('X-Request-ID', 'stream-1')
+          .catch(() => {});
+        await new Promise((resolve) => setImmediate(resolve));
+
+        const unhandled = records(
+          (record) => record.event === 'unhandled_exception' && record.request_id === 'stream-1',
+        );
+        assert.equal(unhandled.length, 1);
+        assert.match(unhandled[0].exception, /Error: Cursor failed/);
+
+        const access = accessRecords('stream-1');
+        assert.equal(access.length, 1);
+        assert.equal(access[0].event, 'http_request_failed');
+        assert.equal(access[0].status_code, 500);
+        assert.equal(access[0].error, 'Error: Cursor failed');
+        assert(!('client_disconnected' in access[0]));
+      });
+
       it('Extracts the client IP in precedence order', () => {
         const req = (headers, remoteAddress) => ({ headers, socket: { remoteAddress } });
         assert.equal(
@@ -422,6 +555,25 @@ module.exports = function (app, template) {
         assert.equal(getClientIp(req({ 'x-real-ip': '4.4.4.4' }, '3.3.3.3')), '4.4.4.4');
         assert.equal(getClientIp(req({}, '3.3.3.3')), '3.3.3.3');
         assert.equal(getClientIp(req({})), 'unknown');
+      });
+
+      it('Uses forwarded addresses only when they are valid IPs', () => {
+        const req = (headers, remoteAddress) => ({ headers, socket: { remoteAddress } });
+        assert.equal(
+          getClientIp(
+            req({ 'x-forwarded-for': 'not-an-ip, 2.2.2.2', 'x-real-ip': '4.4.4.4' }, '3.3.3.3'),
+          ),
+          '4.4.4.4',
+        );
+        assert.equal(
+          getClientIp(
+            req({ 'x-forwarded-for': 'x'.repeat(16000), 'x-real-ip': '<script>' }, '3.3.3.3'),
+          ),
+          '3.3.3.3',
+        );
+        assert.equal(getClientIp(req({ 'x-forwarded-for': '1.2.3.4:5678' })), '1.2.3.4');
+        assert.equal(getClientIp(req({ 'x-forwarded-for': '[2001:db8::1]:443' })), '2001:db8::1');
+        assert.equal(getClientIp(req({ 'x-forwarded-for': '2001:db8::1' })), '2001:db8::1');
       });
 
       it('Adds the request id to outbound headers inside a request', () => {
@@ -456,6 +608,81 @@ module.exports = function (app, template) {
         assert(exposed.includes('x-request-id'));
         assert(exposed.includes('x-jwt-token'));
         template.users.admin.token = res.headers['x-jwt-token'] || template.users.admin.token;
+      });
+
+      it('Logs routine token and user events at DEBUG', async () => {
+        const res = await request(app)
+          .get('/current')
+          .set('x-jwt-token', template.users.admin.token)
+          .expect(200);
+        template.users.admin.token = res.headers['x-jwt-token'] || template.users.admin.token;
+        const requestRecords = records(
+          (record) => record.request_id === res.headers['x-request-id'],
+        );
+        const routine = requestRecords.filter((record) =>
+          [
+            'token',
+            'user',
+          ].includes(record.event),
+        );
+        assert(routine.length > 0, 'Missing routine token records');
+        routine.forEach((record) => assert.equal(record.level, 'DEBUG'));
+        assert.equal(accessRecords(res.headers['x-request-id'])[0].level, 'INFO');
+      });
+
+      it('Masks user names in audit events', () => {
+        const formio = app.formio;
+        const audit = formio.config.audit;
+        formio.config.audit = true;
+        try {
+          outsideRequest(() => {
+            formio.audit('EAUTH_PASSWORD', {}, 'jdoe');
+            formio.audit('EAUTH_NOUSER', {}, 'jane@example.org');
+          });
+        } finally {
+          formio.config.audit = audit;
+        }
+        const audits = records((record) => record.audit === true);
+        assert.deepEqual(
+          audits.map((record) => [
+            record.event,
+            record.details,
+          ]),
+          [
+            [
+              'eauth_password',
+              [
+                'j***',
+              ],
+            ],
+            [
+              'eauth_nouser',
+              [
+                'j***@example.org',
+              ],
+            ],
+          ],
+        );
+      });
+
+      it('Passes other router errors to the error handler', async () => {
+        // body-parser rejects a non-UTF charset with a 415, which used to be ignored.
+        const res = await request(app)
+          .post('/form')
+          .set('Content-Type', 'application/json; charset=latin1')
+          .send('{}')
+          .expect(415);
+        const requestId = res.headers['x-request-id'];
+        const rejected = records(
+          (record) => record.event === 'http_request_rejected' && record.request_id === requestId,
+        );
+        assert.equal(rejected.length, 1);
+        assert.equal(rejected[0].level, 'WARNING');
+        assert.equal(rejected[0].status_code, 415);
+        const access = accessRecords(requestId);
+        assert.equal(access.length, 1);
+        assert.equal(access[0].event, 'http_request_finished');
+        assert.equal(access[0].status_code, 415);
       });
 
       it('Logs one access record per business request at INFO', async () => {
@@ -565,7 +792,7 @@ module.exports = function (app, template) {
                   .post(`/form/${template.forms[formName]._id}/submission`)
                   .set('x-jwt-token', helper.owner.token)
                   .send({ data: { name: 'Sensitive' } })
-                  .end(() => {
+                  .end((err, res) => {
                     try {
                       const [
                         failure,
@@ -574,7 +801,11 @@ module.exports = function (app, template) {
                       assert.equal(failure.level, 'WARNING');
                       assert.equal(failure.error_code, 'ECONNREFUSED');
                       assert(!('reason' in failure));
-                      assert(!JSON.stringify(failure).includes('Sensitive'));
+                      // The blocking failure also reaches the actions log and the response.
+                      assert.equal(res.status, 400);
+                      assert.match(res.body.message, /^request to \[URL\] failed/);
+                      assert(!res.text.includes('Sensitive'));
+                      assert(!JSON.stringify(capture.records).includes('Sensitive'));
                       done();
                     } catch (err) {
                       done(err);

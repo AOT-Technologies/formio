@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const net = require('net');
 const logging = require('../util/logger');
 
 const { context } = logging;
@@ -13,19 +14,33 @@ const HEALTH_PATH = /^\/(?:health(?:\/.*)?|healthz|ping|checkpoint|actuator\/hea
 const EXPOSE_HEADERS = 'Access-Control-Expose-Headers';
 
 /**
+ * Parse a client address from a header value, dropping a port (`1.2.3.4:80`, `[::1]:443`).
+ * Returns undefined when the value is not an IP address.
+ */
+const parseIp = (value) => {
+  let address = String(value || '').trim();
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(address);
+  if (bracketed) {
+    address = bracketed[1];
+  } else if (/^[\d.]+:\d+$/.test(address)) {
+    address = address.slice(0, address.lastIndexOf(':'));
+  }
+  return net.isIP(address) ? address : undefined;
+};
+
+/**
  * Resolve the client IP: X-Forwarded-For (first entry), X-Real-IP, then the socket address.
+ * Header values are used only when they are valid IP addresses.
  */
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const first = String(forwarded).split(',')[0].trim();
-    if (first) {
-      return first;
-    }
+  const first = forwarded && parseIp(String(forwarded).split(',')[0]);
+  if (first) {
+    return first;
   }
-  const realIp = req.headers['x-real-ip'];
-  if (realIp && String(realIp).trim()) {
-    return String(realIp).trim();
+  const realIp = parseIp(req.headers['x-real-ip']);
+  if (realIp) {
+    return realIp;
   }
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 };
@@ -78,11 +93,13 @@ const requestContext = (req, res, next) => {
   appendExposeHeaders(res, context.REQUEST_ID_HEADER);
 
   let logged = false;
-  const logAccess = (clientDisconnected) => {
+  const logAccess = (closedEarly) => {
     if (logged) {
       return;
     }
     logged = true;
+    // A server failure is never reported as a client disconnect, even if the socket was destroyed.
+    const clientDisconnected = closedEarly && !store.failed;
     const fields = {
       status_code: clientDisconnected ? 499 : res.statusCode,
       duration_ms: Math.round(Number(process.hrtime.bigint() - start) / 1e4) / 100,
@@ -93,7 +110,7 @@ const requestContext = (req, res, next) => {
     if (clientDisconnected) {
       fields.client_disconnected = true;
     }
-    if (store.failed && !clientDisconnected) {
+    if (store.failed) {
       accessLogger.write(
         'error',
         'HTTP request failed',
@@ -145,12 +162,19 @@ const markFailed = (req, err) => {
 /**
  * Final error handler: client errors keep their status, anything else is logged as an unhandled
  * exception and answered with a generic 500 (the X-Request-ID header is already set).
+ * Express recognizes error handlers by their four parameters, so the unused `_next` must stay.
  */
-const errorHandler = (err, req, res, next) => {
-  if (res.headersSent) {
-    return next(err);
-  }
+const errorHandler = (err, req, res, _next) => {
   const error = err instanceof Error ? err : new Error(String(err));
+  if (res.headersSent) {
+    markFailed(req, error);
+    errorLogger.exception('Unhandled exception', error, { event: 'unhandled_exception' });
+    // Close the connection like Express's final handler, without its unredacted stderr stack.
+    if (req.socket) {
+      req.socket.destroy();
+    }
+    return;
+  }
   const status = Number(err && (err.status || err.statusCode));
   if (status >= 400 && status < 500) {
     errorLogger.warning('Request rejected', {

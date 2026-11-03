@@ -159,10 +159,11 @@ const buildRecord = (level, name, rawMessage, args, store) => {
     service: config.service,
     environment: config.environment,
   };
+  // Context values come from the client (e.g. a JWT in the path), so they are redacted too.
   for (const [
     key,
     value,
-  ] of Object.entries(contextFields)) {
+  ] of Object.entries(redact.sanitizeFields(contextFields))) {
     if (value !== undefined) {
       record[key] = value;
     }
@@ -236,17 +237,34 @@ root.on('error', (err, transport) => {
 });
 
 /**
- * Move a zipped log file into the archive folder and cap the archive at the backup count.
+ * Order archives oldest first: by date, then by size chunk. A plain name sort would put `.log.gz`
+ * (the first chunk) after `.log.1.gz`.
  */
-const archiveFile = async (file) => {
-  const { archiveDirname, backupCount } = config.file;
+const compareArchives = (a, b) => {
+  if (a.date !== b.date) {
+    return a.date < b.date ? -1 : 1;
+  }
+  return a.chunk - b.chunk;
+};
+
+/**
+ * Move a zipped log file into the archive folder and cap this log file's archives at the backup
+ * count. Other files in the (possibly shared) archive folder are left alone.
+ */
+const archiveFile = async (file, { archiveDirname, backupCount, archivePattern } = config.file) => {
   try {
     await fs.promises.mkdir(archiveDirname, { recursive: true });
     await fs.promises.rename(file, path.join(archiveDirname, path.basename(file)));
     if (backupCount > 0) {
-      const archived = (await fs.promises.readdir(archiveDirname)).sort();
+      const archived = (await fs.promises.readdir(archiveDirname))
+        .map((name) => archivePattern.exec(name))
+        .filter(Boolean)
+        .map((match) => ({ name: match[0], date: match[1], chunk: Number(match[2] || 0) }))
+        .sort(compareArchives);
       const expired = archived.slice(0, Math.max(0, archived.length - backupCount));
-      await Promise.all(expired.map((name) => fs.promises.unlink(path.join(archiveDirname, name))));
+      await Promise.all(
+        expired.map(({ name }) => fs.promises.unlink(path.join(archiveDirname, name))),
+      );
     }
   } catch (err) {
     root.log(
@@ -270,7 +288,11 @@ if (config.file.enabled) {
     level: config.level,
     format: jsonFormat,
   });
-  fileTransport.on('archive', archiveFile);
+  // Archive events can overlap; prune one at a time so readdir/unlink calls don't race.
+  let archiving = Promise.resolve();
+  fileTransport.on('archive', (file) => {
+    archiving = archiving.then(() => archiveFile(file));
+  });
   root.add(fileTransport);
 }
 
@@ -416,8 +438,9 @@ module.exports = {
   snakeCase,
   buildRecord,
   consoleFormat,
+  archiveFile,
   getLogger,
   flush,
-  addCaptureTransport,
-  removeCaptureTransport,
+  // Test-only: lowers the root level to debug, so never exported outside the test suite.
+  ...(process.env.TEST_SUITE ? { addCaptureTransport, removeCaptureTransport } : {}),
 };

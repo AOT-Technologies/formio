@@ -28,6 +28,7 @@ const SENSITIVE_KEY_PARTS = [
   'api_key',
   'apikey',
   'private_key',
+  'privatekey',
   'credential',
 ];
 
@@ -48,10 +49,19 @@ const VALUE_PATTERNS = [
     /(\b[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi,
     '$1[REDACTED]@',
   ],
+  // Not in §5.2: emails in free text (e.g. SMTP errors) are masked like maskEmail().
+  [
+    /(?<![\w.%+-])([\w.%+-])[\w.%+-]*@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/g,
+    '$1***@$2',
+  ],
 ];
 
 const isSensitiveKey = (key) => {
-  const normalized = String(key).toLowerCase().replace(/-/g, '_');
+  // camelCase is split first, so `privateKey` matches `private_key`.
+  const normalized = String(key)
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/-/g, '_');
   return SENSITIVE_KEY_PARTS.some((part) => normalized.includes(part));
 };
 
@@ -88,7 +98,7 @@ const describeError = (err) => `${err.name || 'Error'}: ${err.message}`;
  *
  * @param {*} value - The value to sanitize.
  * @param {number} depth - The current nesting depth.
- * @param {WeakSet} seen - Objects already visited (cycle protection).
+ * @param {WeakSet} seen - Objects on the current path (cycle protection).
  * @param {number} maxBytes - The string size limit for this value.
  * @return {*} A JSON-safe, redacted copy of the value.
  */
@@ -130,14 +140,19 @@ const sanitizeValue = (value, depth = 0, seen = new WeakSet(), maxBytes = MAX_ST
       return sanitizeValue(json, depth, seen, maxBytes);
     }
   }
+  // Only ancestors count as cycles; an object referenced twice side by side is logged twice.
   seen.add(value);
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValue(item, depth + 1, seen));
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeValue(item, depth + 1, seen));
+    }
+    if (value instanceof Map || value instanceof Set) {
+      return sanitizeValue(Array.from(value), depth, seen);
+    }
+    return sanitizeFields(value, depth + 1, seen);
+  } finally {
+    seen.delete(value);
   }
-  if (value instanceof Map || value instanceof Set) {
-    return sanitizeValue(Array.from(value), depth, seen);
-  }
-  return sanitizeFields(value, depth + 1, seen);
 };
 
 /**

@@ -81,7 +81,10 @@ module.exports = function (options) {
           ) {
             var msg =
               'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
+            // A client error: logged as a rejected request, not as an unhandled exception.
+            const err = new Error(msg);
+            err.status = 403;
+            return callback(err, false);
           }
           return callback(null, true);
         },

@@ -6,7 +6,7 @@
 # hub.docker.com/r/_/node/
 # Pinned to an exact Node release for reproducible builds. Bump this tag
 # whenever Node.js publishes a security release (see FWF-6795).
-FROM node:24.22.1-alpine
+FROM node:26.13.0-alpine
 
 # set label for image
 LABEL Name="formsflow"

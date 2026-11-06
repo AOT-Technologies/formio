@@ -23,7 +23,7 @@
   "templateVersion": "2.0.0",
   "dependencies": {
     "@formio/core": "^2.7.0",
-    "@formio/js": "^5.4.0",
+    "@formio/js": "^5.7.0",
     "@formio/node-fetch-http-proxy": "^1.1.0",
     "@formio/vm": "^2.1.0",
     "@sendgrid/mail": "^7.7.0",

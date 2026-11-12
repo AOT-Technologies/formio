@@ -1,6 +1,6 @@
 services:
   forms-flow-forms-db:
-    image: mongo:5.0
+    image: mongo:8.2
     restart: unless-stopped
     hostname: forms-flow-forms-db
     ports:

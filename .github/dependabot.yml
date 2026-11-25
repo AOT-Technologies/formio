@@ -212,7 +212,7 @@ updates:
   # ===========================================================================
   # GitHub Actions — SHA pins in .github/workflows (checkout, setup-node, ...).
   # One PR for everything; action bumps are low-risk and CI validates them.
-  # qodo-ai/pr-agent@main is a branch ref and is never bumped by Dependabot.
+  # The PR-Agent image (docker://pragent/pr-agent@sha256:...) is pinned by digest and bumped by hand.
   # ===========================================================================
   - package-ecosystem: "github-actions"
     directory: "/"

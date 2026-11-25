@@ -3,7 +3,7 @@ name: CD - formsflow-forms
 on:
   workflow_dispatch:
   push:
-    branches: [ formsflow-forms, develop ]
+    branches: [ formsflow-forms, develop, release/* ]
 
 defaults:
   run:

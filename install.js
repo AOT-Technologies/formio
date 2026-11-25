@@ -6,8 +6,7 @@ const fs = require('fs-extra');
 const nunjucks = require('nunjucks');
 nunjucks.configure([], { watch: false });
 const util = require('./src/util/util');
-const debug = require('debug')('formio:error');
-const logger = require('./src/util/logger')('formio:error');
+const logger = require('./src/util/logger')('formio:install');
 
 const path = require('path');
 
@@ -35,12 +34,12 @@ module.exports = function (formio, items, done) {
   const download = function(url, zipFile, dir, done) {
     // Check to see if the client already exists.
     if (fs.existsSync(zipFile)) {
-      util.log(`${directories[dir]} file already exists, skipping download.`);
+      logger.info('Download file already exists, skipping download', { directory: dir });
       return done();
     }
 
     const ProgressBar = require('progress');
-    util.log(`Downloading ${dir}${'...'.green}`);
+    logger.info('Downloading', { directory: dir });
 
     // Download the project.
     let downloadError = null;
@@ -101,13 +100,13 @@ module.exports = function (formio, items, done) {
   const extract = function(zipFile, fromDir, dir, done) {
     // See if we need to extract.
     if (fs.existsSync(directories[dir])) {
-      util.log(`${directories[dir]} already exists, skipping extraction.`);
+      logger.info('Directory already exists, skipping extraction', { directory: dir });
       return done();
     }
 
     // Unzip the contents.
     const AdmZip = require('adm-zip');
-    util.log('Extracting contents...'.green);
+    logger.info('Extracting contents', { directory: dir });
     const zip = new AdmZip(zipFile);
     zip.extractAllTo('', true);
     fs.move(fromDir, directories[dir], function(err) {
@@ -124,8 +123,6 @@ module.exports = function (formio, items, done) {
         info = JSON.parse(fs.readFileSync(path.join(directories[dir], 'package.json')));
       }
       catch (err) {
-        logger.error(err);
-        debug(err);
         return done(err);
       }
 
@@ -199,11 +196,11 @@ module.exports = function (formio, items, done) {
         return done();
       }
 
-      let message = '\nWhich project template would you like to install?\n'.green;
-      message += '\n   Please provide the local file path of the template file.'.yellow;
-      message +=
-        '\n   Or, just press '.yellow + 'ENTER'.green + ' to use the default template.\n'.yellow;
-      util.log(message);
+      logger.info(
+        'Which project template would you like to install? Provide the local file path of the ' +
+          'template file, or press ENTER to use the default template.',
+        { event: 'install_template_prompt' },
+      );
       inquirer
         .prompt([
           {
@@ -241,7 +238,7 @@ module.exports = function (formio, items, done) {
       }
 
       if (!fs.existsSync(templateFile)) {
-        util.log(templateFile);
+        logger.warning('Template file not found', { template_file: templateFile });
         return done('Cannot find the template file!'.red);
       }
 
@@ -249,13 +246,11 @@ module.exports = function (formio, items, done) {
       try {
         template = JSON.parse(fs.readFileSync(templateFile));
       } catch (err) {
-        logger.error(err);
-        debug(err);
         return done(err);
       }
 
       // Get the form.io service.
-      util.log('Importing template...'.green);
+      logger.info('Importing template', { template_file: templateFile });
       const importer = require('./src/templates/import')({ formio: formio });
       importer.template(template, function (err, template) {
         if (err) {
@@ -276,7 +271,7 @@ module.exports = function (formio, items, done) {
       if (!items.user) {
         return done();
       }
-      util.log('Creating root user account...'.green);
+      logger.info('Creating root user account');
       inquirer
         .prompt([
           {
@@ -313,14 +308,14 @@ module.exports = function (formio, items, done) {
           },
         ])
         .then(function (result) {
-          util.log('Encrypting password');
+          logger.debug('Encrypting root user password');
           formio.encrypt(result.password || process.env.ROOT_PASSWORD, async function (err, hash) {
             if (err) {
               return done(err);
             }
 
             // Create the root user submission.
-            util.log('Creating root user account');
+            logger.debug('Saving root user account');
             try {
               await formio.resources.submission.model.create({
                 form: project.resources.admin._id,
@@ -343,7 +338,7 @@ module.exports = function (formio, items, done) {
         });
     },
   };
-  util.log('Installing...');
+  logger.info('Installing');
   async.series(
     [
       steps.downloadClient,
@@ -354,11 +349,10 @@ module.exports = function (formio, items, done) {
     ],
     function (err) {
       if (err) {
-        util.log(err);
         return done(err);
       }
 
-      util.log('Install successful!'.green);
+      logger.info('Install successful');
       done();
     },
   );

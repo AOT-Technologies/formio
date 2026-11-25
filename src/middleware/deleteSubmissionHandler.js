@@ -1,8 +1,5 @@
 'use strict';
 
-const debug = require('debug')('formio:middleware:deleteSubmissionHandler');
-const logger = require('../util/logger')('formio:middleware:deleteSubmissionHandler');
-
 /**
  * The deleteSubmissionHandler middleware.
  *
@@ -33,11 +30,7 @@ module.exports = (router) => {
           };
           next();
         })
-        .catch((err) => {
-          debug(err);
-          logger.error(err);
-          return next(err);
-        });
+        .catch((err) => next(err));
     } else if (req.formId) {
       if (req.headers['x-delete-confirm'] !== req.formId) {
         res.resource = {
@@ -58,11 +51,7 @@ module.exports = (router) => {
           };
           next();
         })
-        .catch((err) => {
-          debug(err);
-          logger.error(err);
-          return next(err);
-        });
+        .catch((err) => next(err));
     }
   };
 };

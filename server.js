@@ -7,40 +7,74 @@ const express = require('express');
 const nunjucks = require('nunjucks');
 const fs = require('fs-extra');
 const path = require('path');
-const util = require('./src/util/util');
 require('colors');
 const Q = require('q');
 const cors = require('cors');
+const logging = require('./src/util/logger');
+const { requestContext, errorHandler } = require('./src/middleware/requestContext');
+const logger = logging('formio:server');
 const test = process.env.TEST_SUITE;
 const noInstall = Number(process.env.NO_INSTALL) || 0;
 
-module.exports = function (options) {
-  options = options || {};
-  const q = Q.defer();
-
-  util.log('');
+/**
+ * Print the startup banner. Only used for human-readable (console) output.
+ */
+const printBanner = function () {
   const rl = require('readline').createInterface({
     input: require('fs').createReadStream('logo.txt'),
   });
 
+  process.stdout.write('\n');
   rl.on('line', function (line) {
-    util.log(
-      line.substring(0, 4) +
+    process.stdout.write(
+      `${
+        line.substring(0, 4) +
         line.substring(4, 30).cyan.bold +
         line.substring(30, 33) +
         line.substring(33, 42).green.bold +
-        line.substring(42),
+        line.substring(42)
+      }\n`,
     );
   });
 
   rl.on('close', function () {
     // Print the welcome screen.
-    util.log('');
-    util.log(fs.readFileSync('welcome.txt').toString().green);
+    process.stdout.write(`\n${fs.readFileSync('welcome.txt').toString().green}\n`);
   });
+};
+
+/**
+ * The CORS origin check for `allowedOrigins`.
+ */
+const corsOrigin = (allowedOrigins) =>
+  function (origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.indexOf(origin) === -1 && allowedOrigins.indexOf('*') === -1) {
+      var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      // A client error: logged as a rejected request, not as an unhandled exception.
+      const err = new Error(msg);
+      err.status = 403;
+      return callback(err, false);
+    }
+    return callback(null, true);
+  };
+
+module.exports = function (options) {
+  options = options || {};
+  const q = Q.defer();
+
+  if (logging.config.format === 'console' && !test) {
+    printBanner();
+  }
+  logger.info('Service starting', { event: 'service_starting' });
 
   // Use the express application.
   const app = options.app || express();
+
+  // Establish the request context and access log before anything else.
+  app.use(requestContext);
 
   // Use the given config.
   const config = options.config || require('config');
@@ -55,20 +89,7 @@ module.exports = function (options) {
   if (config.allowedOrigins) {
     app.use(
       cors({
-        origin: function (origin, callback) {
-          if (!origin) {
-            return callback(null, true);
-          }
-          if (
-            config.allowedOrigins.indexOf(origin) === -1 &&
-            config.allowedOrigins.indexOf('*') === -1
-          ) {
-            var msg =
-              'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
-          }
-          return callback(null, true);
-        },
+        origin: corsOrigin(config.allowedOrigins),
       }),
     );
   }
@@ -85,6 +106,9 @@ module.exports = function (options) {
     const start = function () {
       // Mount the Form.io API platform.
       app.use(options.mount || '/', server);
+
+      // Log unhandled errors and answer with a generic 500.
+      app.use(errorHandler);
 
       // Allow tests access server internals.
       app.formio = formio;
@@ -122,7 +146,7 @@ module.exports = function (options) {
       require('./install')(formio, install, function (err) {
         if (err) {
           if (err !== 'Installation canceled.') {
-            return util.log(err.message);
+            return logger.exception('Installation failed', err, { event: 'install_failed' });
           }
         }
 
@@ -134,3 +158,5 @@ module.exports = function (options) {
 
   return q.promise;
 };
+
+module.exports.corsOrigin = corsOrigin;

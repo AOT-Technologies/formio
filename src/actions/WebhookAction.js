@@ -3,19 +3,16 @@
 const fetch = require('@formio/node-fetch-http-proxy');
 const _ = require('lodash');
 const util = require('../util/util');
+const logging = require('../util/logger');
 
-const LOG_EVENT = 'Webhook Action';
+const logger = logging('formio:action:webhook');
+
+// Fetch error messages embed the request URL, which can be interpolated from submission data.
+const URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
 
 module.exports = function (router) {
   const Action = router.formio.Action;
   const hook = router.formio.hook;
-  const debug = require('debug')('formio:action:webhook');
-  const logger = require('../util/logger')('formio:action:webhook');
-  const logOutput = router.formio.log || debug;
-  const log = (...args) => {
-    logOutput(LOG_EVENT, ...args);
-    logger.error(LOG_EVENT,...args);
-  };
 
   /**
    * WebhookAction class.
@@ -117,7 +114,6 @@ module.exports = function (router) {
      */
     resolve(handler, method, req, res, next, setActionItemMessage) {
       const settings = this.settings;
-      const logerr = (...args) => log(req, ...args, '#resolve');
 
       /**
        * Util function to handle success for a potentially blocking request.
@@ -150,8 +146,19 @@ module.exports = function (router) {
        */
       const handleError = (data, response) => {
         setActionItemMessage('Webhook failed', response);
-        const message = data ? data.message || data : response.statusMessage;
-        logerr(message);
+        let message = data ? data.message || data : response.statusMessage;
+        if (data instanceof Error) {
+          // This message reaches the client and the actions failure log.
+          message = String(data.message || data).replace(URL_PATTERN, '[URL]');
+        }
+        // Identifiers only: fetch errors embed the interpolated URL and response bodies can echo
+        // submission data.
+        logger.warning('Webhook request failed', {
+          form_id: req.formId,
+          action_title: this.title,
+          status_code: _.get(response, 'status'),
+          error_code: data instanceof Error ? data.code || data.type || data.name : undefined,
+        });
 
         if (!_.get(settings, 'block') || _.get(settings, 'block') === false) {
           return;
@@ -218,10 +225,10 @@ module.exports = function (router) {
         const makeRequest = (url, method, credentials, payload) => {
           const options = {
             method,
-            headers: {
+            headers: logging.context.outboundHeaders({
               'content-type': 'application/json',
               accept: 'application/json',
-            },
+            }),
           };
           if (credentials.username) {
             options.headers.Authorization = `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`;

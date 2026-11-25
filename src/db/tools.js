@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const util = require('../util/util');
 const { deriveKeyAndIv } = require('./util');
+const logger = require('../util/logger')('formio:db');
 
 module.exports = function (db, schema) {
   return {
@@ -23,7 +24,7 @@ module.exports = function (db, schema) {
           throw err;
         }
 
-        util.log(` > Upgrading MongoDB Schema lock to v${version}`);
+        logger.info('Upgraded MongoDB schema lock version', { version });
         callback();
       });
     },

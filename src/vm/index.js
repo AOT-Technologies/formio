@@ -5,6 +5,7 @@ const { DefaultEvaluator } = require('@formio/core');
 const { IsolateVM } = require('@formio/vm');
 const { isObject, get } = require('lodash');
 const { RootShim } = require('./src/RootShim');
+const logger = require('../util/logger')('formio:vm');
 
 const CORE_LODASH_MOMENT_INPUTMASK = fs.readFileSync(
   path.resolve(__dirname, 'bundles/core-lodash-moment-inputmask.js'),
@@ -83,7 +84,7 @@ class IsolateVMEvaluator extends DefaultEvaluator {
       modifyEnv = this.hook.alter('dynamicVmDependencies', modifyEnv, context?.form);
       try {
         if (this.noeval || options.noeval) {
-          console.warn('No evaluations allowed for this renderer.');
+          logger.debug('Skipping evaluation because evaluations are disabled');
           return null;
         } else {
           return this.vm.evaluateSync(func, filteredArgs, {
@@ -95,7 +96,7 @@ class IsolateVMEvaluator extends DefaultEvaluator {
         if (err.message.includes('Script execution timed out')) {
           throw err;
         }
-        console.warn(`An error occured within the custom function for ${componentKey}`, err);
+        logger.warning('Custom component function failed', err, { component_key: componentKey });
         return null;
       }
     }

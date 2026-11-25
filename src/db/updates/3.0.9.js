@@ -1,16 +1,17 @@
 'use strict';
 let async = require('async');
+const logger = require('../../util/logger')('formio:update:3.0.9');
 module.exports = function (db, config, tools, done) {
   let dropIndex = function (collection, index, next) {
-    console.log('Dropping ' + collection + ' index ' + index);
+    logger.info('Dropping index', { collection, index });
     db.collection(collection)
       .dropIndex(index)
       .then(() => {
-        console.log('Done dropping ' + collection + ' index ' + index);
+        logger.info('Dropped index', { collection, index });
         next();
       })
       .catch((err) => {
-        console.log(err.message);
+        logger.warning('Could not drop index', err, { collection, index });
         next();
       });
   };

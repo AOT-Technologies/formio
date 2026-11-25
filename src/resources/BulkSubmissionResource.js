@@ -2,6 +2,7 @@
 
 const _ = require('lodash');
 const util = require('../util/util');
+const logger = require('../util/logger')('formio:resources:bulkSubmission');
 const { ObjectId } = require('mongodb');
 
 class BulkSubmission {
@@ -430,7 +431,7 @@ class BulkSubmission {
     if (!this.isEnabled()) {
       return res.status(403).send('Bulk submission create feature is disabled.');
     }
-    util.log('[create submissions] Received bulk create request');
+    logger.info('Received bulk submission create request', { form_id: req.formId });
 
     const context = await this.prepareBulkSubmissionContext({ req, res, isUpsert: false });
     if (!context) return;
@@ -625,7 +626,7 @@ class BulkSubmission {
       return res.status(403).send('Bulk submission create feature is disabled.');
     }
 
-    util.log('[submissions] Received bulk submission upsert request');
+    logger.info('Received bulk submission upsert request', { form_id: req.formId });
 
     const context = await this.prepareBulkSubmissionContext({ req, res, isUpsert: true });
     if (!context) return;

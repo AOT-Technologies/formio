@@ -8,9 +8,17 @@ const bodyParser = require('body-parser');
 const _ = require('lodash');
 const events = require('events');
 const nunjucks = require('nunjucks');
-const log = require('debug')('formio:log');
 const gc = require('expose-gc/function');
-const logger = require('./src/util/logger')('formio:log');
+const logging = require('./src/util/logger');
+const { bindRequestContext } = require('./src/middleware/requestContext');
+const logger = logging('formio:log');
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
+// Per-request bookkeeping from router.formio.log; logged at DEBUG to keep INFO for the access log.
+const ROUTINE_LOG_EVENTS = new Set([
+  'Token',
+  'User',
+  'Action',
+]);
 const { registerEvaluator } = require('@formio/core');
 
 const util = require('./src/util/util');
@@ -26,6 +34,16 @@ router.formio.mongoose = mongoose;
 
 // Use custom template delimiters.
 _.templateSettings.interpolate = /{{([\s\S]+?)}}/g;
+
+/**
+ * Mask a string audit detail (usually a user name): u***@example.com for emails, u*** otherwise.
+ */
+const maskAuditDetail = (item) => {
+  if (typeof item !== 'string' || !item) {
+    return item;
+  }
+  return EMAIL_PATTERN.test(item) ? logging.maskEmail(item) : `${item.charAt(0)}***`;
+};
 
 // Allow custom configurations passed to the Form.IO server.
 module.exports = function (config) {
@@ -45,11 +63,17 @@ module.exports = function (config) {
   router.formio.config.schema = require('./package.json').schema;
 
   router.formio.log = (event, req, ...info) => {
-    const tenantKey = req.token && req.token.tenantKey;
     const result = router.formio.hook.alter('log', event, req, ...info);
-    logger.info(event,{tenantKey: tenantKey, info: info});
     if (result) {
-      log(event, ...info);
+      const messages = info.filter((item) => typeof item === 'string');
+      const details = info.filter((item) => typeof item !== 'string');
+      logger.log(
+        ROUTINE_LOG_EVENTS.has(event) ? 'debug' : 'info',
+        messages.length ? messages.join(' ') : String(event),
+        { event: logging.snakeCase(event) },
+        req,
+        ...details,
+      );
     }
   };
 
@@ -58,7 +82,9 @@ module.exports = function (config) {
       const result = router.formio.hook.alter('audit', info, event, req);
 
       if (result) {
-        console.log(...result);
+        // Audit details may carry user names (or a password typed into the user name field).
+        const details = [].concat(result).map(maskAuditDetail);
+        logger.info('Audit event', { event: logging.snakeCase(event), audit: true, details }, req);
       }
     }
   };
@@ -80,8 +106,7 @@ module.exports = function (config) {
             }
           }
         } catch (error) {
-          logger.error(error);
-          console.log(error);
+          logger.exception('Garbage collection failed', error, { event: 'gc_failed' });
         }
 
         next();
@@ -112,6 +137,8 @@ module.exports = function (config) {
           limit: '16mb',
         }),
       );
+      // Body parsing resumes on stream events; re-enter the logging request context.
+      router.use(bindRequestContext);
 
       router.get("/checkpoint",(req,res)=>{
         router.formio.resources.role.model.find().limit(5).then((data)=>{
@@ -120,6 +147,9 @@ module.exports = function (config) {
           }
           res.status(500);
           res.json({message:"formsflow-forms is down"});
+        }).catch((err) => {
+          logger.exception('Readiness check failed', err, { event: 'readiness_check_failed' });
+          res.status(500).json({message:"formsflow-forms is down"});
         });
       });
 
@@ -131,7 +161,8 @@ module.exports = function (config) {
         if (err.type === 'entity.too.large') {
           return res.status(413).send({ message: 'Request payload too large' });
         }
-        next();
+        // Other parser errors (e.g. 415 unsupported charset) are answered by the final error handler.
+        next(err);
       });
 
       // CORS Support
@@ -223,137 +254,132 @@ module.exports = function (config) {
 
       // Connect to MongoDB.
       const connectToMongoDB = async () => {
-        try {
-          await mongoose.connect(mongoUrl, mongoConfig);
-          util.log(' > Mongo connection established.');
+        await mongoose.connect(mongoUrl, mongoConfig);
+        logger.info('Mongo connection established', { event: 'mongo_connected' });
 
-          // Load the BaseModel.
-          router.formio.BaseModel = require('./src/models/BaseModel');
+        // Load the BaseModel.
+        router.formio.BaseModel = require('./src/models/BaseModel');
 
-          // Load the plugins.
-          router.formio.plugins = require('./src/plugins/plugins');
+        // Load the plugins.
+        router.formio.plugins = require('./src/plugins/plugins');
 
-          router.formio.schemas = {
-            PermissionSchema: require('./src/models/PermissionSchema')(router.formio),
-            AccessSchema: require('./src/models/AccessSchema')(router.formio),
-            FieldMatchAccessPermissionSchema:
-              require('./src/models/FieldMatchAccessPermissionSchema')(router.formio),
-          };
+        router.formio.schemas = {
+          PermissionSchema: require('./src/models/PermissionSchema')(router.formio),
+          AccessSchema: require('./src/models/AccessSchema')(router.formio),
+          FieldMatchAccessPermissionSchema:
+            require('./src/models/FieldMatchAccessPermissionSchema')(router.formio),
+        };
 
-          // Get the models for our project.
-          const models = require('./src/models/models')(router);
+        // Get the models for our project.
+        const models = require('./src/models/models')(router);
 
-          // Load the Schemas.
-          router.formio.schemas = _.assign(router.formio.schemas, models.schemas);
+        // Load the Schemas.
+        router.formio.schemas = _.assign(router.formio.schemas, models.schemas);
 
-          // Load the Models.
-          router.formio.models = models.models;
+        // Load the Models.
+        router.formio.models = models.models;
 
-          // Load the Resources.
-          router.formio.resources = require('./src/resources/resources')(router);
+        // Load the Resources.
+        router.formio.resources = require('./src/resources/resources')(router);
 
-          // Load the request cache
-          router.formio.cache = require('./src/cache/cache')(router);
+        // Load the request cache
+        router.formio.cache = require('./src/cache/cache')(router);
 
-          // Formsflow: return the form metadata
-          const metadataResource = require('./src/resources/formMetadata');
-          router.get('/form/:formId/metadata', metadataResource.getFormMetadata(router));
+        // Formsflow: return the form metadata
+        const metadataResource = require('./src/resources/formMetadata');
+        router.get('/form/:formId/metadata', metadataResource.getFormMetadata(router));
 
-          // Formsflow: return forms by title/path/name
-          const formListingByPathNameTitle = require('./src/resources/FormListingByPathTitleName');
-          router.get('/forms/search', formListingByPathNameTitle.getFormsByTitleOrPathOrName(router));
+        // Formsflow: return forms by title/path/name
+        const formListingByPathNameTitle = require('./src/resources/FormListingByPathTitleName');
+        router.get('/forms/search', formListingByPathNameTitle.getFormsByTitleOrPathOrName(router));
 
-          // Formsflow: bulk submission listing
-          const submissionList = require('./src/resources/SubmissionList').getAllSubmissions(router);
-          router.post('/submissions', router.formio.middleware.tokenVerify, submissionList);
+        // Formsflow: bulk submission listing
+        const submissionList = require('./src/resources/SubmissionList').getAllSubmissions(router);
+        router.post('/submissions', router.formio.middleware.tokenVerify, submissionList);
 
-          // Return the form components.
-          router.get('/form/:formId/components', async function (req, res, next) {
-            try {
-              const form = await router.formio.resources.form.model.findOne({
-                _id: req.params.formId,
-              });
-              if (!form) {
-                return res.status(404).send('Form not found');
-              }
-              // If query params present, filter components that match params
-              const filter =
-                Object.keys(req.query).length !== 0
-                  ? _.omit(req.query, [
-                      'limit',
-                      'skip',
-                    ])
-                  : null;
-              res.json(
-                _(util.flattenComponents(form.components))
-                  .filter(function (component) {
-                    if (!filter) {
-                      return true;
-                    }
-                    return _.reduce(
-                      filter,
-                      function (prev, value, prop) {
-                        if (!value) {
-                          return prev && _.has(component, prop);
-                        }
-                        const actualValue = _.property(prop)(component);
-                        // loose equality so number values can match
-                        return (
-                          (prev && actualValue == value) ||
-                          (value === 'true' && actualValue === true) ||
-                          (value === 'false' && actualValue === false)
-                        );
-                      },
-                      true,
-                    );
-                  })
-                  .values()
-                  .value(),
-              );
-            } catch (err) {
-              return next(err);
+        // Return the form components.
+        router.get('/form/:formId/components', async function (req, res, next) {
+          try {
+            const form = await router.formio.resources.form.model.findOne({
+              _id: req.params.formId,
+            });
+            if (!form) {
+              return res.status(404).send('Form not found');
             }
+            // If query params present, filter components that match params
+            const filter =
+              Object.keys(req.query).length !== 0
+                ? _.omit(req.query, [
+                    'limit',
+                    'skip',
+                  ])
+                : null;
+            res.json(
+              _(util.flattenComponents(form.components))
+                .filter(function (component) {
+                  if (!filter) {
+                    return true;
+                  }
+                  return _.reduce(
+                    filter,
+                    function (prev, value, prop) {
+                      if (!value) {
+                        return prev && _.has(component, prop);
+                      }
+                      const actualValue = _.property(prop)(component);
+                      // loose equality so number values can match
+                      return (
+                        (prev && actualValue == value) ||
+                        (value === 'true' && actualValue === true) ||
+                        (value === 'false' && actualValue === false)
+                      );
+                    },
+                    true,
+                  );
+                })
+                .values()
+                .value(),
+            );
+          } catch (err) {
+            return next(err);
+          }
+        });
+
+        // Import the form actions.
+        router.formio.Action = router.formio.models.action;
+        router.formio.actions = require('./src/actions/actions')(router);
+
+        // Add submission data export capabilities.
+        require('./src/export/export')(router);
+
+        // Add the available templates.
+        router.formio.templates = {
+          default: _.cloneDeep(require('./src/templates/default.json')),
+        };
+
+        // Add the template functions.
+        router.formio.template = require('./src/templates/index')(router);
+
+        const swagger = require('./src/util/swagger');
+        // Show the swagger for the whole site.
+        router.get('/spec.json', function (req, res, _next) {
+          swagger(req, router, function (spec) {
+            res.json(spec);
           });
+        });
 
-          // Import the form actions.
-          router.formio.Action = router.formio.models.action;
-          router.formio.actions = require('./src/actions/actions')(router);
-
-          // Add submission data export capabilities.
-          require('./src/export/export')(router);
-
-          // Add the available templates.
-          router.formio.templates = {
-            default: _.cloneDeep(require('./src/templates/default.json')),
-          };
-
-          // Add the template functions.
-          router.formio.template = require('./src/templates/index')(router);
-
-          const swagger = require('./src/util/swagger');
-          // Show the swagger for the whole site.
-          router.get('/spec.json', function (req, res, _next) {
-            swagger(req, router, function (spec) {
-              res.json(spec);
-            });
+        // Show the swagger for specific forms.
+        router.get('/form/:formId/spec.json', function (req, res, _next) {
+          swagger(req, router, function (spec) {
+            res.json(spec);
           });
+        });
 
-          // Show the swagger for specific forms.
-          router.get('/form/:formId/spec.json', function (req, res, _next) {
-            swagger(req, router, function (spec) {
-              res.json(spec);
-            });
-          });
+        require('./src/middleware/recaptcha')(router);
 
-          require('./src/middleware/recaptcha')(router);
-
-          // Say we are done.
-          router.formio.db = mongoose.connection;
-          return router.formio;
-        } catch (err) {
-          util.log(err.message);
-          throw err.message;
-        }
+        // Say we are done.
+        router.formio.db = mongoose.connection;
+        return router.formio;
       };
       await connectToMongoDB();
     }
@@ -384,7 +410,7 @@ module.exports = function (config) {
     // Run the healthCheck sanity check on /health
 
     const db = await router.formio.update.initialize();
-    util.log('Initializing API Server.');
+    logger.info('Initializing API server', { event: 'api_server_initializing' });
     // Add the database connection to the router.
     router.formio.db = db;
 

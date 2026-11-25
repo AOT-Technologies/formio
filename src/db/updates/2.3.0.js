@@ -3,6 +3,7 @@
 let _ = require('lodash');
 let async = require('async');
 let ObjectId = require('mongodb').ObjectId;
+const logger = require('../../util/logger')('formio:update:2.3.0');
 
 /**
  * Update 2.3.0
@@ -183,7 +184,7 @@ module.exports = function (db, config, tools, done) {
 
           // There are 2 form actions that need to be condensed.
           if (association === 'new') {
-            console.log('Condensing: actions for form: ' + formId);
+            logger.info('Condensing actions for form', { form_id: formId });
             condenseActions(formActions, formId, function (err) {
               if (err) {
                 return callback(err);
@@ -313,9 +314,9 @@ module.exports = function (db, config, tools, done) {
           if (!documents || documents.length === 0) {
             return callback();
           }
-          console.log(documents.length + ' role actions remaining');
+          logger.warning('Role actions remaining', { count: documents.length });
           documents.forEach(function (doc) {
-            console.log('_id: ' + doc._id + ', form: ' + doc.form);
+            logger.warning('Role action remaining', { action_id: doc._id, form_id: doc.form });
           });
           callback();
         })
@@ -335,13 +336,14 @@ module.exports = function (db, config, tools, done) {
           if (!documents || documents.length === 0) {
             return callback();
           }
-          console.log(
-            'Found ' +
-              documents.length +
-              ' auth actions w/ no role and `new` association, expected 0.',
-          );
+          logger.warning('Found auth actions with no role and new association, expected none', {
+            count: documents.length,
+          });
           documents.forEach(function (doc) {
-            console.log('_id: ' + doc._id + ', form._id: ' + doc.form);
+            logger.warning('Auth action with no role and new association', {
+              action_id: doc._id,
+              form_id: doc.form,
+            });
           });
           callback();
         })
@@ -375,9 +377,9 @@ module.exports = function (db, config, tools, done) {
           allFormIds = _.uniq(allFormIds);
           allFormIds.forEach(function (id) {
             if (formsAndActions[id] && formsAndActions[id].length > 1) {
-              console.log(
-                'Found unexpected form w/ auth actions and role actions, form._id: ' + id,
-              );
+              logger.warning('Found unexpected form with both auth and role actions', {
+                form_id: id,
+              });
             }
           });
 
@@ -416,7 +418,6 @@ module.exports = function (db, config, tools, done) {
     ],
     function (err) {
       if (err) {
-        console.log(err);
         return done(err);
       }
 

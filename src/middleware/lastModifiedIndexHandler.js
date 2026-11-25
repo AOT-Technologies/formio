@@ -1,5 +1,6 @@
 'use strict';
 const _ = require('lodash');
+const logger = require('../util/logger')('formio:middleware:lastModifiedIndexHandler');
 
 /**
  * Middleware function to set the lastModified in the response header.
@@ -20,10 +21,7 @@ module.exports = function (router) {
       if (matchObj.hasOwnProperty('tags') && typeof matchObj.tags === 'string') {
         matchObj.tags = { $in: matchObj.tags.split(',') };
       }
-      const lastModifiedAggregationLabel = `Last Modified Aggregation (${new Date().toISOString()})`;
-      if (process.env.PERFORMANCE_TIMER) {
-        console.time(lastModifiedAggregationLabel);
-      }
+      const aggregationStart = Date.now();
       const result = await router.formio.resources.form.model.aggregate([
         {
           $match: matchObj,
@@ -57,13 +55,15 @@ module.exports = function (router) {
         },
       ]);
       if (process.env.PERFORMANCE_TIMER) {
-        console.timeEnd(lastModifiedAggregationLabel);
+        logger.debug('Last modified aggregation finished', {
+          duration_ms: Date.now() - aggregationStart,
+        });
       }
       if (result.length) {
         res.setHeader('Last-Modified', result[0].lastModified.toUTCString());
       }
     } catch (err) {
-      console.warn(err.message);
+      logger.warning('Failed to compute last modified date', err);
       return next();
     }
 

@@ -4,10 +4,7 @@ const exporters = require('.');
 const _ = require('lodash');
 const through = require('through');
 const ResourceFactory = require('resourcejs');
-const debug = (...args)=>{
-  require('debug')('formio:error')(...args);
-  require('../util/logger')('formio:error').error(...args);
-};
+const logger = require('../util/logger')('formio:export');
 
 module.exports = (router) => {
   const hook = require('../util/hook')(router.formio);
@@ -49,8 +46,7 @@ module.exports = (router) => {
         try {
           query = JSON.parse(req.headers['x-query']);
         } catch (e) {
-          debug(e);
-          router.formio.util.log(e);
+          logger.warning('Invalid x-query header, exporting without a query', e);
         }
       } else {
         query = resource.getFindQuery(req, {
@@ -170,7 +166,9 @@ module.exports = (router) => {
                         );
                       })
                       .catch((error) => {
-                        debug(error);
+                        logger.warning('Failed to load nested resource for export', error, {
+                          field_key: key,
+                        });
                         newData[key] = field;
                       }),
                   );
@@ -221,11 +219,7 @@ module.exports = (router) => {
               { end: false },
             );
             // If the DB cursor throws an error, send the error.
-            cursor.on('error', (error) => {
-              debug(error);
-              router.formio.util.log(error);
-              next(error);
-            });
+            cursor.on('error', (error) => next(error));
             // When the DB cursor ends, allow the output stream a tick to perform the last write,
             // then manually end it by pushing a null item to the output stream's queue
             cursor.on('end', () =>

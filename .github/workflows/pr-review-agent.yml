@@ -29,6 +29,18 @@ jobs:
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- Model selection (pinned so an upstream default bump cannot change cost silently) ---
+          config.model: "gpt-6.1-sol" # primary model for /review and /improve
+          config.fallback_models: "gpt-6-luna" # comma-separated; used only after retries on the primary fail
+          config.model_weak: "gpt-6-luna" # cheap model for /describe, /ask, /update_changelog
+          # --- Cost controls ---
+          config.reasoning_effort: "low" # default is medium; reasoning tokens are billed as output
+          litellm.extra_body: '{"service_tier": "flex"}' # OpenAI Flex tier: 50% off, slower; fine for CI
+          config.ai_timeout: "600" # seconds per AI call; raised from 120 so Flex latency does not trigger fallback
+          # --- Context ---
+          config.max_model_tokens: "250000" # prompt cap, default 32000; keep below 272K to avoid OpenAI long-context pricing
+          # --- Observability ---
+          config.output_run_details: "true" # appends model, token count and call count to each PR comment
           github_action_config.auto_review: "true" # enable\disable auto review
           github_action_config.auto_describe: "true" # enable\disable auto describe
           github_action_config.auto_improve: "true" # enable\disable auto improve

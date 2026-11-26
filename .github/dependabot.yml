@@ -160,6 +160,14 @@ updates:
       - dependency-name: "mongodb"
         update-types: ["version-update:semver-major"]
 
+      # ---- Known-bad release -------------------------------------------------
+      # inputmask 5.0.10 calls the browser-only global `matchMedia` at module
+      # load (dist/inputmask.js), so the server crashes on startup when
+      # @formio/js loads it under Node. Pinned to 5.0.9 in package.json; lift
+      # this once a fixed upstream release is verified on Node 24.
+      - dependency-name: "inputmask"
+        versions: ["5.0.10"]
+
   # ===========================================================================
   # Docker — base images of /Dockerfile (node:24.22.1-alpine, pinned exact per
   # FWF-6795) and /openshift_custom_Dockerfile (legacy, node:12).
